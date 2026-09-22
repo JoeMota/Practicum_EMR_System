@@ -26,16 +26,21 @@ const users: User[] = [
     id: "u_chavez", fullName: "Joe Mota", email: "joe.mota@utep.edu", phoneLast4: "5521",
     roles: [{ role: "instructor", courseIds: ["c_phar"] }],
   },
+  {
+    id: "u_sam", fullName: "Sam Torres", email: "sam.torres@miners.utep.edu",
+    universityId: "800999001", phoneLast4: "3344",
+    roles: [{ role: "student", discipline: "pharmacy", courseIds: ["c_phar"] }],
+  },
 ];
 
 const courses: Course[] = [
   {
     id: "c_phar", code: "PHAR 5320", title: "Pharmacotherapy Skills Lab", term: "Fall 2026",
-    instructorIds: ["u_mejia", "u_chavez"], rubricFileName: "SOAP-note-rubric.pdf",
+    instructorIds: ["u_gerardo", "u_chavez"], rubricFileName: "SOAP-note-rubric.pdf",
   },
   {
     id: "c_pt", code: "PHYT 6310", title: "Clinical Practice I", term: "Fall 2026",
-    instructorIds: ["u_mejia"], rubricFileName: "PT-daily-note-rubric.pdf",
+    instructorIds: ["u_gerardo"], rubricFileName: "PT-daily-note-rubric.pdf",
   },
 ];
 
@@ -122,24 +127,9 @@ const patients: Patient[] = [
     socialHistory: "Recreational soccer player. Office job.",
     encounter: { id: "enc_pb", type: "PT visit #4", date: today },
   },
-  t2dmCase("p_ae_ana", "u_ana", "AR"),
+  t2dmCase("p_ae_daniel", "u_daniel", "DR"),
+  t2dmCase("p_ae_clarissa", "u_clarissa", "CD"),
   t2dmCase("p_ae_sam", "u_sam", "ST"),
-  {
-    id: "p_ln_luis", mrn: "TR-10088-LO", firstName: "Linh", lastName: "Nguyen",
-    dob: "1981-05-30", ageYears: 45, sexAtBirth: "Female", pronouns: "she/her",
-    courseId: "c_pt", mode: "assessment", caseTemplateId: "case_lbp", ownerId: "u_luis", isTraining: true,
-    chiefComplaint: "Low back pain for 3 weeks after lifting boxes.",
-    hpi: "45-year-old female with low back pain radiating to the right buttock, worse with sitting. No numbness or bowel/bladder changes.",
-    status: { lifecycle: "Active", encounter: "Checked in", careSetting: "Outpatient" },
-    allergies: [{ substance: "Codeine", reaction: "Nausea", severity: "mild" }],
-    medications: [{ id: "m1", name: "Naproxen", dose: "220 mg", route: "PO", frequency: "Twice daily", indication: "Back pain" }],
-    problems: [{ code: "M54.50", description: "Low back pain, unspecified" }],
-    labs: [],
-    vitals: [{ label: "BP", value: "118/74 mmHg" }, { label: "Pulse", value: "70 bpm" }],
-    familyHistory: "Noncontributory.", surgicalHistory: "None.",
-    socialHistory: "Warehouse supervisor. Walks 3x/week.",
-    encounter: { id: "enc_ln", type: "PT evaluation", date: today },
-  },
 ];
 
 const notes: ClinicalNote[] = [
@@ -157,7 +147,7 @@ const notes: ClinicalNote[] = [
       followup: "Recheck A1C in 3 months.",
     },
     diagnoses: [{ code: "E11.65", label: "Type 2 diabetes mellitus with hyperglycemia" }],
-    routedToId: "u_mejia",
+    routedToId: "u_gerardo",
     createdAt: "2026-09-22T15:02:00", updatedAt: "2026-09-22T15:40:00", signedAt: "2026-09-22T15:40:00",
     feedback: [], addenda: [],
   },
@@ -170,7 +160,7 @@ const audit: AuditEntry[] = [
 ];
 
 const appointments: Appointment[] = [
-  { id: "ap1", patientId: "p_ae_ana", when: "2026-12-15T09:30:00", kind: "Diabetes follow-up", withWhom: "Pharmacy clinic" },
+  { id: "ap1", patientId: "p_ae_daniel", when: "2026-12-15T09:30:00", kind: "Diabetes follow-up", withWhom: "Pharmacy clinic" },
   { id: "ap2", patientId: "p_pb", when: "2026-09-29T14:00:00", kind: "PT visit #5", withWhom: "Physical Therapy" },
 ];
 

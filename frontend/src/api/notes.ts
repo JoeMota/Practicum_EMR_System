@@ -1,6 +1,6 @@
 import type { ClinicalNote, IcdCode, NoteTemplateId, Patient, Role, User } from "../types";
 import { can } from "../utils/permissions";
-import { ApiError, clone, latency, uid } from "./client";
+import { ApiError, USE_MOCK, apiFetch, clone, latency, uid } from "./client";
 import { db } from "./mockDb";
 import { recordAudit } from "./audit";
 
@@ -12,8 +12,12 @@ function find(id: string): ClinicalNote {
   return n;
 }
 
-/** Students see only their own notes; instructors see everything in the chart. */
 export async function listNotesForPatient(viewer: User, role: Role, patientId: string): Promise<ClinicalNote[]> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote[]>(
+      `/notes?patientId=${encodeURIComponent(patientId)}&role=${encodeURIComponent(role)}`,
+    );
+  }
   await latency(150);
   return clone(
     db.notes
@@ -23,6 +27,9 @@ export async function listNotesForPatient(viewer: User, role: Role, patientId: s
 }
 
 export async function getNote(viewer: User, role: Role, id: string): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}?role=${encodeURIComponent(role)}`);
+  }
   await latency(150);
   const n = find(id);
   if (role === "student" && n.authorId !== viewer.id) {
@@ -36,6 +43,12 @@ export async function getNote(viewer: User, role: Role, id: string): Promise<Cli
 export async function createDraft(
   author: User, discipline: ClinicalNote["authorDiscipline"], patient: Patient, templateId: NoteTemplateId,
 ): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>("/notes", {
+      method: "POST",
+      body: { patientId: patient.id, templateId, discipline },
+    });
+  }
   await latency(150);
   const note: ClinicalNote = {
     id: uid("n"), patientId: patient.id, encounterId: patient.encounter.id, templateId,
@@ -55,11 +68,13 @@ export interface DraftPatch {
   routedToId?: string;
 }
 
-/**
- * Autosave. `expectedVersion` stops two sessions from silently overwriting each other
- * (Sprint 1 assumption: "stop two people editing the same record at the same time").
- */
 export async function saveDraft(author: User, id: string, expectedVersion: number, patch: DraftPatch): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}`, {
+      method: "PATCH",
+      body: { ...patch, expectedVersion },
+    });
+  }
   await latency(250);
   const n = find(id);
   if (n.authorId !== author.id) throw new ApiError(403, "Only the author can edit this note.");
@@ -71,8 +86,13 @@ export async function saveDraft(author: User, id: string, expectedVersion: numbe
   return clone(n);
 }
 
-/** Practice mode: author signs and the note is final. Assessment mode: signs and routes for review. */
 export async function signNote(author: User, id: string, expectedVersion: number): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}/sign`, {
+      method: "POST",
+      body: { expectedVersion },
+    });
+  }
   await latency(300);
   const n = find(id);
   if (n.authorId !== author.id) throw new ApiError(403, "Only the author can sign this note.");
@@ -87,6 +107,12 @@ export async function signNote(author: User, id: string, expectedVersion: number
 }
 
 export async function cosignNote(reviewer: User, role: Role, id: string, comment?: string): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}/cosign`, {
+      method: "POST",
+      body: { comment },
+    });
+  }
   await latency(300);
   const n = find(id);
   if (!can(role, "note:cosign")) {
@@ -107,6 +133,12 @@ export async function cosignNote(reviewer: User, role: Role, id: string, comment
 }
 
 export async function returnNote(reviewer: User, role: Role, id: string, comment: string): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}/return`, {
+      method: "POST",
+      body: { comment },
+    });
+  }
   await latency(300);
   const n = find(id);
   if (!can(role, "note:cosign")) throw new ApiError(403, "Your role can't return notes.");
@@ -120,8 +152,13 @@ export async function returnNote(reviewer: User, role: Role, id: string, comment
   return clone(n);
 }
 
-/** Signed notes are never edited in place. Corrections are appended. */
 export async function addAddendum(author: User, id: string, body: string): Promise<ClinicalNote> {
+  if (!USE_MOCK) {
+    return apiFetch<ClinicalNote>(`/notes/${id}/addendum`, {
+      method: "POST",
+      body: { body },
+    });
+  }
   await latency(200);
   const n = find(id);
   if (n.status !== "signed" && n.status !== "cosigned") throw new ApiError(409, "Addenda are for signed notes. Edit the draft instead.");
@@ -138,6 +175,9 @@ export interface QueueItem {
 }
 
 export async function listReviewQueue(reviewer: User, courseId: string): Promise<QueueItem[]> {
+  if (!USE_MOCK) {
+    return apiFetch<QueueItem[]>(`/notes/review-queue?courseId=${encodeURIComponent(courseId)}`);
+  }
   await latency();
   return db.notes
     .filter((n) => n.mode === "assessment" && n.status !== "draft" && n.routedToId === reviewer.id)

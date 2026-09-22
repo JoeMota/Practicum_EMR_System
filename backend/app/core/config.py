@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "UTEP Educational EHR API"
     API_V1_PREFIX: str = "/api/v1"
 
-    # App runs async through asyncpg
-    DATABASE_URL: str = "postgresql+asyncpg://ehr:ehr@localhost:5432/ehr"
+    # App runs async through asyncpg (must match docker-compose credentials)
+    DATABASE_URL: str = "postgresql+asyncpg://emr:emr@localhost:5432/emr"
 
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"

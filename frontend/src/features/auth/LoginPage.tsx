@@ -144,7 +144,7 @@ export default function LoginPage() {
                   label="6-digit code" autoFocus fullWidth value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   slotProps={{ htmlInput: { inputMode: "numeric", autoComplete: "one-time-code", maxLength: 6, style: { letterSpacing: "0.4em", fontSize: 20 } } }}
-                  helperText={import.meta.env.DEV ? `Mock backend: use ${DEV_CODE}` : undefined}
+                  helperText={import.meta.env.DEV ? `Dev / educational MFA code: ${DEV_CODE}` : undefined}
                 />
                 <Button type="submit" variant="contained" size="large" disabled={busy || code.length !== 6}>
                   {busy ? "Verifying…" : "Verify and sign in"}

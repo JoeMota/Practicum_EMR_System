@@ -1,1 +1,9 @@
-{}
+{
+  "name": "practicum-emr-system",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "test:backend": "cd backend && .venv/bin/pytest"
+  }
+}

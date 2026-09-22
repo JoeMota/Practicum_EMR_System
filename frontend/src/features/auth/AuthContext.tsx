@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { Discipline, Role, RoleAssignment, User } from "../../types";
+import { clearSessionToken } from "../../api/auth";
 
 interface Session {
   user: User;
@@ -55,10 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       courseId: session?.courseId,
       signIn: (user) => {
         const first = user.roles[0];
+        if (!first) {
+          persist(null);
+          return;
+        }
         const onlyCourse = user.roles.length === 1 && first.courseIds.length === 1 ? first.courseIds[0] : undefined;
         persist({ user, activeRole: first.role, courseId: onlyCourse });
       },
-      signOut: () => persist(null),
+      signOut: () => {
+        clearSessionToken();
+        persist(null);
+      },
       switchRole: (role) => {
         if (!session) return;
         const next = session.user.roles.find((r) => r.role === role);

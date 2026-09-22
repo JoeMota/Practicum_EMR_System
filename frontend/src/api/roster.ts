@@ -1,19 +1,33 @@
 import type { Discipline, RosterRow, User } from "../types";
-import { ApiError, clone, latency, uid } from "./client";
+import { ApiError, USE_MOCK, apiFetch, clone, latency, uid } from "./client";
 import { db } from "./mockDb";
 import { recordAudit } from "./audit";
 
 export async function listRoster(courseId: string): Promise<User[]> {
+  if (!USE_MOCK) return apiFetch<User[]>(`/courses/${courseId}/roster`);
   await latency(150);
   return clone(
     db.users.filter((u) => u.roles.some((r) => r.role === "student" && r.courseIds.includes(courseId))),
   );
 }
 
-/** Adds students to a course. Existing accounts are reused — one account across courses. */
 export async function importRoster(
   actor: User, courseId: string, discipline: Discipline, rows: RosterRow[],
 ): Promise<{ added: number; alreadyEnrolled: number }> {
+  if (!USE_MOCK) {
+    return apiFetch<{ added: number; alreadyEnrolled: number }>(`/courses/${courseId}/roster/import`, {
+      method: "POST",
+      body: {
+        discipline,
+        rows: rows.map((r) => ({
+          fullName: r.fullName,
+          email: r.email,
+          universityId: r.universityId,
+          ...(r.problem ? { problem: r.problem } : {}),
+        })),
+      },
+    });
+  }
   await latency(400);
   if (rows.some((r) => r.problem)) throw new ApiError(400, "Fix the flagged rows before importing.");
   let added = 0;
@@ -41,6 +55,10 @@ export async function importRoster(
 }
 
 export async function removeFromCourse(actor: User, courseId: string, userId: string): Promise<void> {
+  if (!USE_MOCK) {
+    await apiFetch<void>(`/courses/${courseId}/roster/${userId}`, { method: "DELETE" });
+    return;
+  }
   await latency(200);
   const user = db.users.find((u) => u.id === userId);
   user?.roles.forEach((r) => {
