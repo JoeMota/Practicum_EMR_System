@@ -92,7 +92,14 @@ export default function NoteReviewPage() {
             <NoteProgress note={note} />
 
             {course.data?.rubricFileName && (
-              <Button startIcon={<DescriptionOutlined />} size="small" sx={{ mt: 1.5 }}>
+              <Button
+                startIcon={<DescriptionOutlined />}
+                size="small"
+                sx={{ mt: 1.5 }}
+                href={`/rubrics/${course.data.rubricFileName.replace(/\.pdf$/i, ".html")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Open rubric ({course.data.rubricFileName})
               </Button>
             )}

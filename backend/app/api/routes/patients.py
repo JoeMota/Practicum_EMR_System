@@ -8,7 +8,7 @@ from app.models.note import ClinicalNote
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.clinical import PatientOut, PatientRowOut, PatientStatusIn
-from app.services.access import can_reset_practice, list_enrollments
+from app.services.access import can_reset_practice, require_app_role
 from app.services.audit import log_event
 from app.services.serializers import apply_patient_snapshot, patient_out
 
@@ -28,9 +28,7 @@ async def list_patients(
     courseId: uuid.UUID = Query(...),
     role: str = Query(...),
 ):
-    enrollments = await list_enrollments(db, user.id)
-    if not any(e.course_id == courseId for e in enrollments):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enrolled in this course")
+    role = await require_app_role(db, user.id, role, courseId)
 
     patients = (
         await db.scalars(
@@ -85,6 +83,7 @@ async def get_patient(
     p = await db.get(Patient, patient_id)
     if p is None or p.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This patient doesn't exist or was archived.")
+    role = await require_app_role(db, user.id, role, p.course_id)
     if not _visible(p, user, role):
         await log_event(
             db,
@@ -128,6 +127,7 @@ async def update_status(
     p = await db.get(Patient, patient_id)
     if p is None or p.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
+    role = await require_app_role(db, user.id, role, p.course_id)
 
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     only_encounter = set(patch.keys()) <= {"encounter"}

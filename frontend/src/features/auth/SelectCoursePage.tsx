@@ -15,7 +15,7 @@ export default function SelectCoursePage() {
   const navigate = useNavigate();
   const { user, activeRole, switchRole, selectCourse, signOut } = useSession();
   const [picked, setPicked] = useState<string>();
-  const { data: courses = [] } = useAsync(() => listCoursesForUser(user), [user.id]);
+  const { data: courses = [], loading, error } = useAsync(() => listCoursesForUser(user), [user.id]);
 
   const assignment = user.roles.find((r) => r.role === activeRole);
   const available = courses.filter((c) => assignment?.courseIds.includes(c.id));
@@ -38,6 +38,8 @@ export default function SelectCoursePage() {
       <Box component="main" sx={{ maxWidth: 640, mx: "auto", px: 2, py: 5 }}>
         <Typography component="h1" variant="h5">Welcome, {user.fullName.split(" ")[0]}</Typography>
         <Typography color="text.secondary" sx={{ mb: 3 }}>Choose the course you're working in today.</Typography>
+
+        {error && <Typography color="error" sx={{ mb: 2 }}>{error.message}</Typography>}
 
         {user.roles.length > 1 && (
           <Box sx={{ mb: 3 }}>
@@ -70,11 +72,12 @@ export default function SelectCoursePage() {
               </CardActionArea>
             </Card>
           ))}
-          {available.length === 0 && (
+          {!loading && available.length === 0 && (
             <Typography color="text.secondary">
               You aren't on any course roster yet. Ask your instructor to add you.
             </Typography>
           )}
+          {loading && <Typography color="text.secondary">Loading your courses…</Typography>}
         </Stack>
 
         <Button variant="contained" size="large" sx={{ mt: 3 }} disabled={!picked} onClick={go}>

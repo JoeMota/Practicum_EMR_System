@@ -24,6 +24,8 @@ export interface User {
   universityId?: string; // 800 number
   phoneLast4?: string;
   roles: RoleAssignment[];
+  /** FR-08: temp-password accounts must change before clinical screens. */
+  mustChangePassword?: boolean;
 }
 
 export interface Course {

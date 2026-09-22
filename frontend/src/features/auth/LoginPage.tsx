@@ -62,6 +62,10 @@ export default function LoginPage() {
     run(async () => {
       const user = await verifyCode(challenge!.id, code.trim());
       signIn(user);
+      if (user.mustChangePassword) {
+        navigate("/change-password", { replace: true });
+        return;
+      }
       const oneRoleOneCourse = user.roles.length === 1 && user.roles[0].courseIds.length === 1;
       navigate(oneRoleOneCourse ? homePathFor(user.roles[0].role) : "/select-course", { replace: true });
     });

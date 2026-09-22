@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Discipline, Role, RoleAssignment, User } from "../../types";
 import { clearSessionToken } from "../../api/auth";
+import { AUTH_EXPIRED_EVENT } from "../../api/client";
 
 interface Session {
   user: User;
@@ -19,6 +20,7 @@ interface AuthCtx {
   signOut: () => void;
   switchRole: (role: Role) => void;
   selectCourse: (courseId: string) => void;
+  markPasswordChanged: () => void;
 }
 
 const KEY = "emr.session";
@@ -45,6 +47,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signOut = useCallback(() => {
+    clearSessionToken();
+    persist(null);
+  }, [persist]);
+
+  useEffect(() => {
+    const onExpired = () => signOut();
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, [signOut]);
+
   const value = useMemo<AuthCtx>(() => {
     const assignment = session?.user.roles.find((r) => r.role === session.activeRole) ?? null;
     return {
@@ -63,10 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const onlyCourse = user.roles.length === 1 && first.courseIds.length === 1 ? first.courseIds[0] : undefined;
         persist({ user, activeRole: first.role, courseId: onlyCourse });
       },
-      signOut: () => {
-        clearSessionToken();
-        persist(null);
-      },
+      signOut,
       switchRole: (role) => {
         if (!session) return;
         const next = session.user.roles.find((r) => r.role === role);
@@ -74,8 +84,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persist({ ...session, activeRole: role, courseId: keepCourse ? session.courseId : undefined });
       },
       selectCourse: (courseId) => session && persist({ ...session, courseId }),
+      markPasswordChanged: () => {
+        if (!session) return;
+        persist({
+          ...session,
+          user: { ...session.user, mustChangePassword: false },
+        });
+      },
     };
-  }, [session, persist]);
+  }, [session, persist, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

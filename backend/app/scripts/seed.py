@@ -376,10 +376,56 @@ async def seed_demo(db, roles: dict[str, Role]) -> None:
             with_whom="Pharmacy clinic",
         ))
 
+    # Practice patient A should show scheduling content on the student demo path
+    if not (await db.scalars(select(Appointment).where(Appointment.patient_id == pa.id))).first():
+        db.add(Appointment(
+            patient_id=pa.id,
+            when=datetime(2026, 10, 6, 10, 0, tzinfo=timezone.utc),
+            kind="BP follow-up / med review",
+            with_whom="Pharmacy clinic",
+        ))
+
+    # Also seed a pending note routed to Joe so either instructor can demo review
+    joe_note = (
+        await db.execute(
+            select(ClinicalNote).where(
+                ClinicalNote.author_id == clarissa.id,
+                ClinicalNote.routed_to_id == joe.id,
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if not joe_note:
+        ae_clarissa = await db.get(Patient, PID["ae_clarissa"])
+        if ae_clarissa:
+            db.add(ClinicalNote(
+                patient_id=ae_clarissa.id,
+                encounter_id=ae_clarissa.encounter["id"],
+                template_id="pharmacy_mtm",
+                author_id=clarissa.id,
+                author_name=clarissa.full_name,
+                author_discipline="pharmacy",
+                mode="assessment",
+                status="pending_review",
+                version=3,
+                content={
+                    "reason": "Diabetes follow-up.",
+                    "objective": "A1C 10.5%, FBG 212.",
+                    "recommendations": "Titrate metformin; adherence counseling.",
+                },
+                diagnoses=[{"code": "E11.65", "label": "Type 2 diabetes mellitus with hyperglycemia"}],
+                feedback=[],
+                addenda=[],
+                routed_to_id=joe.id,
+                signed_at=datetime(2026, 9, 22, 16, 10, tzinfo=timezone.utc),
+                archived=False,
+            ))
+
     print("Demo users (password: practicum1, MFA: 123456):")
-    print("  Student:    daniel.reyes@miners.utep.edu")
+    print("  Student:    daniel.reyes@miners.utep.edu  (write/sign notes)")
     print("  Student:    clarissa.dominguez@miners.utep.edu")
-    print("  Instructor: gerardo.sillas@utep.edu / joe.mota@utep.edu")
+    print("  Student:    sam.torres@miners.utep.edu    (pre-submitted note)")
+    print("  Instructor: gerardo.sillas@utep.edu       (review Sam's note; admin)")
+    print("  Instructor: joe.mota@utep.edu             (review Clarissa's note)")
 
 
 async def seed(admin_email: str | None, admin_password: str | None, demo: bool) -> None:

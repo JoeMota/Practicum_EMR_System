@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,6 +11,8 @@ from sqlalchemy.orm import selectinload
 from app.models.course import Enrollment
 from app.models.user import User
 from app.services.auth import permission_codes
+
+VALID_APP_ROLES = frozenset({"student", "instructor", "admin", "front_desk"})
 
 
 async def list_enrollments(db: AsyncSession, user_id: uuid.UUID) -> list[Enrollment]:
@@ -36,6 +39,26 @@ def is_staff(enrollments: list[Enrollment], course_id: uuid.UUID | None = None) 
         has_app_role(enrollments, r, course_id)
         for r in ("instructor", "admin", "front_desk")
     )
+
+
+async def require_app_role(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    claimed_role: str,
+    course_id: uuid.UUID | None = None,
+) -> str:
+    """Validate client `?role=` against real enrollments (never trust the query param alone)."""
+    if claimed_role not in VALID_APP_ROLES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
+    enrollments = await list_enrollments(db, user_id)
+    if course_id is not None and not any(e.course_id == course_id for e in enrollments):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enrolled in this course")
+    if not has_app_role(enrollments, claimed_role, course_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not enrolled with that role for this course.",
+        )
+    return claimed_role
 
 
 def can_cosign(user: User) -> bool:

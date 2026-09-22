@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Box, Breadcrumbs, LinearProgress, Link, Paper, Stack, Tab, Tabs, Typography } from "@mui/material";
-import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
+import { Box, Breadcrumbs, Button, LinearProgress, Link, Paper, Stack, Tab, Tabs, Typography } from "@mui/material";
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getPatient, updatePatientStatus } from "../../api/patients";
 import { listNotesForPatient } from "../../api/notes";
 import { useSession } from "../auth/AuthContext";
@@ -26,6 +26,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function PatientChartPage() {
   const { patientId = "" } = useParams();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "summary") as TabId;
   const { user, activeRole } = useSession();
@@ -74,7 +75,18 @@ export default function PatientChartPage() {
         )}
         {tab === "notes" && (
           <Paper sx={{ p: 2.5 }}>
-            <NotesList notes={notes.data ?? []} patientId={p.id} reviewer={!can(activeRole, "note:author")} />
+            <NotesList
+              notes={notes.data ?? []}
+              patientId={p.id}
+              reviewer={!can(activeRole, "note:author")}
+              emptyAction={
+                can(activeRole, "note:author") ? (
+                  <Button variant="contained" onClick={() => navigate(`/patients/${p.id}/notes/new`)}>
+                    Start note
+                  </Button>
+                ) : undefined
+              }
+            />
           </Paper>
         )}
         {tab === "medications" && <MedicationsTab patient={p} />}

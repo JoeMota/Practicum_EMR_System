@@ -14,7 +14,7 @@ from app.schemas.clinical import (
     NoteActionIn,
     QueueItemOut,
 )
-from app.services.access import can_cosign
+from app.services.access import can_cosign, require_app_role
 from app.services.audit import log_event
 from app.services.serializers import note_out, patient_out
 
@@ -32,6 +32,13 @@ async def _get_note(db: DbSession, note_id: uuid.UUID) -> ClinicalNote:
     return n
 
 
+async def _require_role_for_patient(db: DbSession, user_id: uuid.UUID, patient_id: uuid.UUID, role: str) -> str:
+    patient = await db.get(Patient, patient_id)
+    if patient is None or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    return await require_app_role(db, user_id, role, patient.course_id)
+
+
 @router.get("", response_model=list[ClinicalNoteOut])
 async def list_notes(
     user: CurrentUser,
@@ -39,6 +46,7 @@ async def list_notes(
     patientId: uuid.UUID = Query(...),
     role: str = Query(...),
 ):
+    role = await _require_role_for_patient(db, user.id, patientId, role)
     q = select(ClinicalNote).where(
         ClinicalNote.patient_id == patientId,
         ClinicalNote.archived.is_(False),
@@ -80,6 +88,7 @@ async def review_queue(
 @router.get("/{note_id}", response_model=ClinicalNoteOut)
 async def get_note(note_id: uuid.UUID, user: CurrentUser, db: DbSession, role: str = Query(...)):
     n = await _get_note(db, note_id)
+    role = await _require_role_for_patient(db, user.id, n.patient_id, role)
     if role == "student" and n.author_id != user.id:
         await log_event(
             db, action="note.view", entity_type="note", actor_user_id=user.id,

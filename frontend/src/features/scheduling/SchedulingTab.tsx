@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
 import type { Patient } from "../../types";
 import { createReferral, listAppointments, listReferrals } from "../../api/scheduling";
 import { useSession } from "../auth/AuthContext";
@@ -17,6 +17,11 @@ export default function SchedulingTab({ patient }: { patient: Patient }) {
 
   return (
     <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { md: "1fr 1fr" } }}>
+      {(appts.error || refs.error) && (
+        <Alert severity="error" sx={{ gridColumn: "1 / -1" }}>
+          {(appts.error ?? refs.error)!.message}
+        </Alert>
+      )}
       <Paper sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6" sx={{ mb: 1.5 }}>Upcoming appointments</Typography>
         {(appts.data ?? []).length === 0 && <Typography variant="body2" color="text.secondary">None scheduled.</Typography>}

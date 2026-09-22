@@ -57,14 +57,17 @@ export async function verifyCode(challengeId: string, code: string): Promise<Use
     const res = await apiFetch<{
       access_token: string;
       must_change_password: boolean;
-      user: User & { mustChangePassword?: boolean };
+      user: User;
     }>("/auth/verify-code", {
       method: "POST",
       auth: false,
       body: { challengeId, code },
     });
     setAccessToken(res.access_token);
-    return res.user;
+    return {
+      ...res.user,
+      mustChangePassword: res.must_change_password || res.user.mustChangePassword,
+    };
   }
   await latency(300);
   const ch = challenges.get(challengeId);
@@ -74,6 +77,19 @@ export async function verifyCode(challengeId: string, code: string): Promise<Use
   const user = db.users.find((u) => u.id === ch.userId)!;
   recordAudit(user, "auth.sign_in", `user/${user.id}`, "ok", `code via ${ch.channel ?? "sms"}`);
   return clone(user);
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  if (!USE_MOCK) {
+    await apiFetch<void>("/auth/change-password", {
+      method: "POST",
+      body: { current_password: currentPassword, new_password: newPassword },
+    });
+    return;
+  }
+  await latency(200);
+  if (newPassword.length < 8) throw new ApiError(400, "Password must be at least 8 characters.");
+  if (currentPassword === newPassword) throw new ApiError(400, "New password must be different");
 }
 
 export async function fetchMe(): Promise<User> {

@@ -8,6 +8,7 @@ export const API_BASE = import.meta.env.VITE_API_URL
 export const USE_MOCK = String(import.meta.env.VITE_USE_MOCK ?? "false").toLowerCase() === "true";
 
 const TOKEN_KEY = "emr.access_token";
+export const AUTH_EXPIRED_EVENT = "emr:auth-expired";
 
 export class ApiError extends Error {
   status: number;
@@ -51,7 +52,9 @@ async function parseError(res: Response): Promise<ApiError> {
   try {
     const data = await res.json();
     if (typeof data?.detail === "string") message = data.detail;
-    else if (Array.isArray(data?.detail)) message = data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ") || message;
+    else if (Array.isArray(data?.detail)) {
+      message = data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join("; ") || message;
+    }
   } catch {
     /* ignore */
   }
@@ -79,6 +82,10 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  if (res.status === 401 && auth) {
+    setAccessToken(null);
+    window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+  }
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
