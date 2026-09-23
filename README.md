@@ -170,6 +170,38 @@ cd backend && source .venv/bin/activate && pytest
 
 Includes MFA → patients smoke and notes draft → sign → cosign/return.
 
+## Deploy (Vercel — frontend)
+
+The UI is a Vite SPA under `frontend/`. FastAPI + Postgres are **not** hosted on Vercel; run the API elsewhere (Railway, Render, Fly.io, a VM, etc.) or use mock mode for UI-only previews.
+
+### Recommended project settings
+
+1. Import the GitHub repo in Vercel (or `cd frontend && vercel link`).
+2. Set **Root Directory** to `frontend` (uses `frontend/vercel.json`).
+3. Framework preset: **Vite** (build `npm run build`, output `dist`).
+4. Environment variables:
+
+| Variable | Preview / Production | Notes |
+|----------|----------------------|--------|
+| `VITE_API_URL` | API origin, e.g. `https://api.example.com` | Baked at build time. No trailing slash. Required for live API. |
+| `VITE_USE_MOCK` | `false` (default) or `true` | `true` = in-memory demo UI with no backend. |
+
+5. On the **backend** host, set `CORS_ORIGINS` to include your Vercel URL(s), e.g. `["https://your-app.vercel.app"]`.
+
+Preview deploys: push a non-production branch after Git is connected. Production: promote a preview or deploy to `main` / `--prod`.
+
+CLI (from `frontend/`, after `vercel login` or `VERCEL_TOKEN`):
+
+```bash
+cd frontend
+vercel link --yes
+vercel env add VITE_API_URL
+vercel deploy          # preview
+vercel deploy --prod   # production
+```
+
+Without a hosted API, a UI-only preview can set `VITE_USE_MOCK=true` for that deployment’s build env.
+
 ## Important
 
 Do not commit `.env` files, passwords, API keys, or real patient information.
