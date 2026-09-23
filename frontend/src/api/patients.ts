@@ -1,6 +1,6 @@
 import type { NoteStatus, Patient, PatientStatus, Role, User } from "../types";
 import { can } from "../utils/permissions";
-import { ApiError, clone, latency } from "./client";
+import { ApiError, USE_MOCK, apiFetch, clone, latency } from "./client";
 import { db } from "./mockDb";
 import { recordAudit } from "./audit";
 
@@ -16,6 +16,9 @@ function visibleTo(p: Patient, viewer: User, role: Role): boolean {
 }
 
 export async function listPatients(viewer: User, role: Role, courseId: string): Promise<PatientRow[]> {
+  if (!USE_MOCK) {
+    return apiFetch<PatientRow[]>(`/patients?courseId=${encodeURIComponent(courseId)}&role=${encodeURIComponent(role)}`);
+  }
   await latency();
   return db.patients
     .filter((p) => p.courseId === courseId && visibleTo(p, viewer, role))
@@ -33,6 +36,9 @@ export async function listPatients(viewer: User, role: Role, courseId: string): 
 }
 
 export async function getPatient(viewer: User, role: Role, id: string): Promise<Patient> {
+  if (!USE_MOCK) {
+    return apiFetch<Patient>(`/patients/${id}?role=${encodeURIComponent(role)}`);
+  }
   await latency();
   const p = db.patients.find((x) => x.id === id);
   if (!p) throw new ApiError(404, "This patient doesn't exist or was archived.");
@@ -48,6 +54,12 @@ export async function getPatient(viewer: User, role: Role, id: string): Promise<
 export async function updatePatientStatus(
   viewer: User, role: Role, id: string, patch: Partial<PatientStatus>,
 ): Promise<Patient> {
+  if (!USE_MOCK) {
+    return apiFetch<Patient>(`/patients/${id}/status?role=${encodeURIComponent(role)}`, {
+      method: "PATCH",
+      body: patch,
+    });
+  }
   await latency(150);
   const p = db.patients.find((x) => x.id === id);
   if (!p) throw new ApiError(404, "Patient not found.");
@@ -62,8 +74,11 @@ export async function updatePatientStatus(
   return clone(p);
 }
 
-/** Restores a shared practice patient to its original state. Notes are archived, not deleted. */
 export async function resetPracticePatient(viewer: User, role: Role, id: string): Promise<void> {
+  if (!USE_MOCK) {
+    await apiFetch<void>(`/patients/${id}/reset`, { method: "POST" });
+    return;
+  }
   await latency(300);
   if (!can(role, "patient:reset_practice")) throw new ApiError(403, "Only instructors can reset practice patients.");
   const snapshot = db.practiceSnapshots.get(id);

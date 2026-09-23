@@ -70,6 +70,7 @@ export default function PatientListPage() {
       </Box>
 
       {flash && <Alert severity="success" onClose={() => setFlash("")} sx={{ mb: 2 }}>{flash}</Alert>}
+      {rows.error && <Alert severity="error" sx={{ mb: 2 }}>{rows.error.message}</Alert>}
 
       <Paper>
         <Tabs

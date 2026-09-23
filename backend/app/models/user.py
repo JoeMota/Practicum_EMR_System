@@ -57,9 +57,15 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True)  # FR-08
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    university_id: Mapped[str | None] = mapped_column(String(20))  # 800 number
+    phone_last4: Mapped[str | None] = mapped_column(String(4))
 
     # Open client question #2 (multiple roles/disciplines?). Nullable single FK for now.
     discipline_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("disciplines.id"))
 
     discipline: Mapped[Discipline | None] = relationship()
     roles: Mapped[list[Role]] = relationship(secondary=user_roles)
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()

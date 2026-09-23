@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import RequireAuth from "./features/auth/RequireAuth";
 import LoginPage from "./features/auth/LoginPage";
 import SelectCoursePage from "./features/auth/SelectCoursePage";
+import ChangePasswordPage from "./features/auth/ChangePasswordPage";
 import AppShell from "./components/AppShell";
 import PatientListPage from "./features/patients/PatientListPage";
 import PatientChartPage from "./features/patients/PatientChartPage";
@@ -17,8 +18,10 @@ import { homePathFor } from "./utils/permissions";
 
 function LoginRoute() {
   const { session } = useAuth();
-  if (session?.courseId) return <Navigate to={homePathFor(session.activeRole)} replace />;
-  return <LoginPage />;
+  if (!session) return <LoginPage />;
+  if (session.user.mustChangePassword) return <Navigate to="/change-password" replace />;
+  if (!session.courseId) return <Navigate to="/select-course" replace />;
+  return <Navigate to={homePathFor(session.activeRole)} replace />;
 }
 
 export default function App() {
@@ -28,6 +31,10 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LoginRoute />} />
+
+            <Route element={<RequireAuth needsCourse={false} allowTempPassword />}>
+              <Route path="/change-password" element={<ChangePasswordPage />} />
+            </Route>
 
             <Route element={<RequireAuth needsCourse={false} />}>
               <Route path="/select-course" element={<SelectCoursePage />} />

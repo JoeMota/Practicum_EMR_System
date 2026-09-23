@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Box, Button, LinearProgress, Paper, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography,
+  Alert, Box, Button, LinearProgress, Paper, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { listReviewQueue } from "../../api/notes";
@@ -36,6 +36,10 @@ export default function ReviewQueuePage() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {course.data ? `${course.data.code}: ` : ""}assessment notes students routed to you
       </Typography>
+
+      {queue.error && (
+        <Alert severity="error" sx={{ mb: 2 }}>{queue.error.message}</Alert>
+      )}
 
       <Paper>
         <Tabs value={filter} onChange={(_, v) => setFilter(v)} sx={{ px: 1, borderBottom: 1, borderColor: "divider" }} aria-label="Filter by status">
