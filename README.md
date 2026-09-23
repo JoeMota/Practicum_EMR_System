@@ -102,6 +102,22 @@ Roster-imported students get temporary password **`ChangeMe1!`** and are forced 
 
 All patients are synthetic training data — never commit real PHI.
 
+### UTEP login + Duo
+
+Production sign-in is **Sign in with UTEP** (Microsoft Entra ID / campus SSO). UTEP already runs **Duo MFA** on that login, so this app does not re-prompt Duo after SSO.
+
+1. Ask UTEP IT (or an Entra admin) to register a **Web** application:
+   - Redirect URI: `{API_PUBLIC_URL}/api/v1/auth/sso/callback` (local example: `http://localhost:8000/api/v1/auth/sso/callback`)
+   - Allow accounts in the UTEP tenant only
+2. Put `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` in `backend/.env`
+3. Set `FRONTEND_URL` to the SPA origin and `CORS_ORIGINS` to match
+4. For campus-only login, set `AUTH_REQUIRE_UTEP_SSO=true` (hides demo password MFA)
+5. Users must still be on the course roster (email `@utep.edu` / `@miners.utep.edu`); SSO alone does not create EMR accounts
+
+Optional: configure **Duo Universal Prompt** (`DUO_*`) if you keep local password login and want real Duo instead of the educational `123456` code. Skip this when everyone uses **Sign in with UTEP**.
+
+Check what the UI will offer: `GET /api/v1/auth/providers`.
+
 ### JWT notes
 
 - After MFA verify (or Swagger password login), the API returns a Bearer **JWT** (`access_token`).
@@ -153,6 +169,7 @@ Open http://localhost:5173 after both servers are running and the DB is seeded.
 | Area | Endpoints |
 |------|-----------|
 | Auth / MFA | `POST /auth/challenge`, `/auth/send-code`, `/auth/verify-code`, `/auth/login`, `GET /auth/me`, `POST /auth/change-password` |
+| UTEP SSO / Duo | `GET /auth/providers`, `/auth/sso/login`, `/auth/sso/callback`, `/auth/duo/callback` |
 | Courses | `GET /courses`, `/courses/{id}`, `/courses/{id}/instructors` |
 | Roster | `GET/POST/DELETE /courses/{id}/roster…` |
 | Patients | `GET /patients`, `GET/PATCH /patients/{id}…`, `POST …/reset` |

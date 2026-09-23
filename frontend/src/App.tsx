@@ -5,6 +5,7 @@ import RequireAuth from "./features/auth/RequireAuth";
 import LoginPage from "./features/auth/LoginPage";
 import SelectCoursePage from "./features/auth/SelectCoursePage";
 import ChangePasswordPage from "./features/auth/ChangePasswordPage";
+import SsoCallbackPage from "./features/auth/SsoCallbackPage";
 import AppShell from "./components/AppShell";
 import PatientListPage from "./features/patients/PatientListPage";
 import PatientChartPage from "./features/patients/PatientChartPage";
@@ -31,6 +32,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LoginRoute />} />
+            <Route path="/auth/callback" element={<SsoCallbackPage />} />
 
             <Route element={<RequireAuth needsCourse={false} allowTempPassword />}>
               <Route path="/change-password" element={<ChangePasswordPage />} />

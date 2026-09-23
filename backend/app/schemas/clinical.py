@@ -33,9 +33,11 @@ class ChallengeStartRequest(BaseModel):
 
 
 class ChallengeStartResponse(BaseModel):
-    challengeId: str
+    challengeId: str | None = None
     phoneLast4: str | None = None
-    emailMasked: str
+    emailMasked: str | None = None
+    # When Duo is configured for local login, redirect here instead of email/SMS code.
+    duoAuthUrl: str | None = None
 
 
 class SendCodeRequest(BaseModel):
@@ -53,6 +55,15 @@ class AuthTokenResponse(BaseModel):
     token_type: str = "bearer"
     must_change_password: bool
     user: SessionUserOut
+
+
+class AuthProvidersOut(BaseModel):
+    """What the login UI should offer."""
+
+    utepSso: bool
+    duo: bool
+    localMfa: bool
+    requireUtepSso: bool
 
 
 class CourseOut(BaseModel):
