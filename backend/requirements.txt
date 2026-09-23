@@ -8,7 +8,9 @@ asyncpg==0.31.0
 certifi==2026.7.22
 cffi==2.1.1
 click==8.5.0
+cryptography==50.0.1
 dnspython==2.8.0
+duo_universal==2.3.1
 email-validator==2.3.0
 fastapi==0.141.1
 greenlet==3.5.6
@@ -26,8 +28,8 @@ psycopg2-binary==2.9.12
 pwdlib==0.3.1
 pycparser==3.0
 pydantic==2.13.5
-pydantic-settings==2.15.0
 pydantic_core==2.46.5
+pydantic-settings==2.15.0
 Pygments==2.21.0
 PyJWT==2.14.0
 pytest==9.1.1
@@ -37,8 +39,8 @@ python-multipart==0.0.32
 PyYAML==6.0.3
 SQLAlchemy==2.0.52
 starlette==1.6.0
-typing-inspection==0.4.4
 typing_extensions==4.16.0
+typing-inspection==0.4.4
 uvicorn==0.52.4
 uvloop==0.22.1
 watchfiles==1.2.0

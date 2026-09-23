@@ -1,9 +1,16 @@
 import type { User } from "../types";
-import { ApiError, USE_MOCK, apiFetch, clone, latency, setAccessToken, uid } from "./client";
+import { ApiError, API_BASE, USE_MOCK, apiFetch, clone, latency, setAccessToken, uid } from "./client";
 import { db } from "./mockDb";
 import { recordAudit } from "./audit";
 
 export type CodeChannel = "sms" | "email";
+
+export interface AuthProviders {
+  utepSso: boolean;
+  duo: boolean;
+  localMfa: boolean;
+  requireUtepSso: boolean;
+}
 
 interface Challenge { userId: string; channel?: CodeChannel }
 const challenges = new Map<string, Challenge>();
@@ -13,12 +20,39 @@ export const DEV_CODE = "123456";
 
 const ALLOWED = /@(miners\.)?utep\.edu$/i;
 
+export async function fetchAuthProviders(): Promise<AuthProviders> {
+  if (USE_MOCK) {
+    return { utepSso: false, duo: false, localMfa: true, requireUtepSso: false };
+  }
+  return apiFetch<AuthProviders>("/auth/providers", { auth: false });
+}
+
+/** Browser redirect into Microsoft Entra (UTEP campus login + Duo). */
+export function startUtepSso(returnPath = "/auth/callback") {
+  const base = API_BASE.replace(/\/$/, "");
+  const url = `${base}/auth/sso/login?return_path=${encodeURIComponent(returnPath)}`;
+  window.location.assign(url);
+}
+
+/** After Entra/Duo redirect, exchange the access token for a session user. */
+export async function completeSsoSession(accessToken: string): Promise<User> {
+  setAccessToken(accessToken);
+  if (USE_MOCK) throw new ApiError(501, "SSO is for live API only");
+  return apiFetch<User>("/auth/me");
+}
+
 export async function startSignIn(email: string, password: string) {
   if (!USE_MOCK) {
-    return apiFetch<{ challengeId: string; phoneLast4?: string; emailMasked: string }>(
-      "/auth/challenge",
-      { method: "POST", auth: false, body: { email, password } },
-    );
+    return apiFetch<{
+      challengeId?: string;
+      phoneLast4?: string;
+      emailMasked?: string;
+      duoAuthUrl?: string;
+    }>("/auth/challenge", {
+      method: "POST",
+      auth: false,
+      body: { email, password },
+    });
   }
   await latency(350);
   if (!ALLOWED.test(email.trim())) {

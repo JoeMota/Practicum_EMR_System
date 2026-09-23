@@ -59,6 +59,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     university_id: Mapped[str | None] = mapped_column(String(20))  # 800 number
     phone_last4: Mapped[str | None] = mapped_column(String(4))
+    # Microsoft Entra object id when the account has signed in via UTEP SSO
+    entra_oid: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     # Open client question #2 (multiple roles/disciplines?). Nullable single FK for now.
     discipline_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("disciplines.id"))

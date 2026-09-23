@@ -1,23 +1,42 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
-  Alert, Box, Button, IconButton, InputAdornment, Link, Paper, Stack, TextField, Typography,
+  Alert, Box, Button, Divider, IconButton, InputAdornment, Link, Paper, Stack, TextField, Typography,
 } from "@mui/material";
 import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlined from "@mui/icons-material/VisibilityOffOutlined";
 import SmsOutlined from "@mui/icons-material/SmsOutlined";
 import MailOutlineRounded from "@mui/icons-material/MailOutlineRounded";
-import { useNavigate } from "react-router-dom";
-import { DEV_CODE, sendCode, startSignIn, verifyCode, type CodeChannel } from "../../api/auth";
+import SchoolOutlined from "@mui/icons-material/SchoolOutlined";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  DEV_CODE,
+  fetchAuthProviders,
+  sendCode,
+  startSignIn,
+  startUtepSso,
+  verifyCode,
+  type AuthProviders,
+  type CodeChannel,
+} from "../../api/auth";
 import { homePathFor } from "../../utils/permissions";
 import { utep } from "../../theme/tokens";
 import { useAuth } from "./AuthContext";
 
 type Step = "credentials" | "channel" | "code";
 
+const DEFAULT_PROVIDERS: AuthProviders = {
+  utepSso: false,
+  duo: false,
+  localMfa: true,
+  requireUtepSso: false,
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn } = useAuth();
 
+  const [providers, setProviders] = useState<AuthProviders>(DEFAULT_PROVIDERS);
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,8 +44,22 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<{ id: string; phoneLast4?: string; emailMasked: string }>();
   const [channel, setChannel] = useState<CodeChannel>("sms");
   const [code, setCode] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(searchParams.get("sso_error") ?? "");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuthProviders()
+      .then((p) => {
+        if (!cancelled) setProviders(p);
+      })
+      .catch(() => {
+        /* keep defaults — local MFA demo still works offline */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -45,7 +78,12 @@ export default function LoginPage() {
     if (!email.trim()) return setError("Enter your UTEP email to continue.");
     run(async () => {
       const res = await startSignIn(email, password);
-      setChallenge({ id: res.challengeId, phoneLast4: res.phoneLast4, emailMasked: res.emailMasked });
+      if (res.duoAuthUrl) {
+        window.location.assign(res.duoAuthUrl);
+        return;
+      }
+      if (!res.challengeId) throw new Error("Sign-in challenge was incomplete. Try again.");
+      setChallenge({ id: res.challengeId, phoneLast4: res.phoneLast4, emailMasked: res.emailMasked ?? "" });
       setStep("channel");
     });
   };
@@ -74,6 +112,9 @@ export default function LoginPage() {
   const destination =
     channel === "sms" ? `your phone ending in ${challenge?.phoneLast4}` : challenge?.emailMasked;
 
+  const showLocal = providers.localMfa && !providers.requireUtepSso;
+  const showSso = providers.utepSso;
+
   return (
     <Box sx={{ minHeight: "100dvh", bgcolor: "background.default", display: "flex", flexDirection: "column" }}>
       <Box component="header" sx={{ bgcolor: utep.orange, color: utep.navy, px: { xs: 2, sm: 3.5 }, height: 60, display: "flex", alignItems: "center" }}>
@@ -86,7 +127,11 @@ export default function LoginPage() {
             {step === "credentials" ? "Sign in" : step === "channel" ? "Verify it's you" : "Enter your code"}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            {step === "credentials" && "For UTEP health sciences students and faculty. Every patient here is simulated."}
+            {step === "credentials" && (
+              showSso
+                ? "Use your UTEP account. Campus Duo MFA is required by UTEP login."
+                : "For UTEP health sciences students and faculty. Every patient here is simulated."
+            )}
             {step === "channel" && "We'll send a 6-digit code. Choose where to get it."}
             {step === "code" && `We sent a 6-digit code to ${destination}.`}
           </Typography>
@@ -94,33 +139,76 @@ export default function LoginPage() {
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           {step === "credentials" && (
-            <Box component="form" noValidate onSubmit={submitCredentials}>
-              <Stack spacing={2}>
-                <TextField
-                  label="UTEP email" type="email" autoComplete="username" autoFocus fullWidth
-                  placeholder="you@miners.utep.edu" value={email} onChange={(e) => setEmail(e.target.value)}
-                />
-                <TextField
-                  label="Password" type={showPassword ? "text" : "password"} autoComplete="current-password"
-                  fullWidth value={password} onChange={(e) => setPassword(e.target.value)}
-                  slotProps={{ input: {
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                          onClick={() => setShowPassword((s) => !s)} edge="end"
-                        >
-                          {showPassword ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  } }}
-                />
-                <Button type="submit" variant="contained" size="large" disabled={busy}>
-                  {busy ? "Checking…" : "Continue"}
+            <Stack spacing={2}>
+              {showSso && (
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={<SchoolOutlined />}
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    startUtepSso();
+                  }}
+                >
+                  Sign in with UTEP
                 </Button>
-              </Stack>
-            </Box>
+              )}
+
+              {showSso && showLocal && (
+                <Divider>
+                  <Typography variant="caption" color="text.secondary">or demo password</Typography>
+                </Divider>
+              )}
+
+              {showLocal && (
+                <Box component="form" noValidate onSubmit={submitCredentials}>
+                  <Stack spacing={2}>
+                    <TextField
+                      label="UTEP email" type="email" autoComplete="username" autoFocus={!showSso} fullWidth
+                      placeholder="you@miners.utep.edu" value={email} onChange={(e) => setEmail(e.target.value)}
+                      helperText="Must be @utep.edu or @miners.utep.edu"
+                    />
+                    <TextField
+                      label="Password" type={showPassword ? "text" : "password"} autoComplete="current-password"
+                      fullWidth value={password} onChange={(e) => setPassword(e.target.value)}
+                      slotProps={{ input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label={showPassword ? "Hide password" : "Show password"}
+                              onClick={() => setShowPassword((s) => !s)} edge="end"
+                            >
+                              {showPassword ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      } }}
+                    />
+                    <Button type="submit" variant={showSso ? "outlined" : "contained"} size="large" disabled={busy}>
+                      {busy ? "Checking…" : providers.duo ? "Continue to Duo" : "Continue"}
+                    </Button>
+                    {providers.duo && (
+                      <Typography variant="caption" color="text.secondary">
+                        After your password, Duo will verify it's you.
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
+              )}
+
+              {!showSso && !showLocal && (
+                <Alert severity="warning">
+                  No sign-in method is configured. Ask an admin to set Entra SSO or enable local login.
+                </Alert>
+              )}
+
+              {showSso && !showLocal && (
+                <Typography variant="caption" color="text.secondary">
+                  Only UTEP campus login is allowed for this deployment.
+                </Typography>
+              )}
+            </Stack>
           )}
 
           {step === "channel" && (
