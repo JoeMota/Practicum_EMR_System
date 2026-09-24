@@ -96,6 +96,7 @@ UID = {
     "gerardo": uuid.UUID("11111111-1111-1111-1111-111111111103"),
     "joe": uuid.UUID("11111111-1111-1111-1111-111111111104"),
     "sam": uuid.UUID("11111111-1111-1111-1111-111111111105"),
+    "jamota": uuid.UUID("11111111-1111-1111-1111-111111111099"),
 }
 CID = {
     "phar": uuid.UUID("22222222-2222-2222-2222-222222222201"),
@@ -199,6 +200,10 @@ async def seed_demo(db, roles: dict[str, Role]) -> None:
         UID["joe"], "joe.mota@utep.edu", "Joe", "Mota",
         uni=None, phone="5521", role_codes=["instructor"], discipline_code=None,
     )
+    jamota = await ensure_user(
+        UID["jamota"], "jamota@miners.utep.edu", "Joe", "Mota",
+        uni="800000099", phone=None, role_codes=["instructor", "admin"], discipline_code=None,
+    )
     sam = await ensure_user(
         UID["sam"], "sam.torres@miners.utep.edu", "Sam", "Torres",
         uni="800999001", phone="3344", role_codes=["student", "pharmacist"], discipline_code="pharmacy",
@@ -237,6 +242,8 @@ async def seed_demo(db, roles: dict[str, Role]) -> None:
     await ensure_enrollment(gerardo.id, pt.id, "instructor")
     await ensure_enrollment(gerardo.id, pt.id, "admin")
     await ensure_enrollment(joe.id, phar.id, "instructor")
+    await ensure_enrollment(jamota.id, phar.id, "instructor")
+    await ensure_enrollment(jamota.id, phar.id, "admin")
 
     today = "2026-09-22"
 
@@ -426,6 +433,7 @@ async def seed_demo(db, roles: dict[str, Role]) -> None:
     print("  Student:    sam.torres@miners.utep.edu    (pre-submitted note)")
     print("  Instructor: gerardo.sillas@utep.edu       (review Sam's note; admin)")
     print("  Instructor: joe.mota@utep.edu             (review Clarissa's note)")
+    print("  Instructor: jamota@miners.utep.edu        (personal miners account)")
 
 
 async def seed(admin_email: str | None, admin_password: str | None, demo: bool) -> None:
