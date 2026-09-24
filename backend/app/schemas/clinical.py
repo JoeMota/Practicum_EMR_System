@@ -202,7 +202,9 @@ class AuditEntryOut(BaseModel):
     actorId: str
     actorName: str
     action: str
+    actionLabel: str
     entity: str
+    recordLabel: str
     result: Literal["ok", "denied"]
     detail: str | None = None
 

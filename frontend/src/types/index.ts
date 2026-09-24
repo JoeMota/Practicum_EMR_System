@@ -191,7 +191,9 @@ export interface AuditEntry {
   actorId: string;
   actorName: string;
   action: string;
+  actionLabel?: string;
   entity: string;
+  recordLabel?: string;
   result: "ok" | "denied";
   detail?: string;
 }
