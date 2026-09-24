@@ -182,10 +182,12 @@ Open http://localhost:5173 after both servers are running and the DB is seeded.
 1. Login: `sam.torres@miners.utep.edu` / `practicum1` / MFA `123456`
 2. Student on PHAR 5320 — own Einstein case (`TR-10057-ST`) with a note already pending with Gerardo
 
-### 5. Roster temp password (optional)
+### 5. Roster — add one person or import spreadsheet
 
-1. As Gerardo (admin), open **Roster** → import a CSV row
-2. New account password is **`ChangeMe1!`** until they complete **Change password**
+1. As instructor/admin (`gerardo.sillas@utep.edu` or `jamota@miners.utep.edu`), open **Roster**
+2. **Add one person**: name, UTEP email, optional 800 number, role (student/instructor), discipline → **Add to course**
+3. Or upload a spreadsheet (template link on the page)
+4. New accounts use temp password **`ChangeMe1!`** and must change it on first login
 
 ## API surface (v1)
 
@@ -194,7 +196,7 @@ Open http://localhost:5173 after both servers are running and the DB is seeded.
 | Auth / MFA | `POST /auth/challenge`, `/auth/send-code`, `/auth/verify-code`, `/auth/login`, `GET /auth/me`, `POST /auth/change-password` |
 | UTEP SSO / Duo | `GET /auth/providers`, `/auth/sso/login`, `/auth/sso/callback`, `/auth/duo/callback` |
 | Courses | `GET /courses`, `/courses/{id}`, `/courses/{id}/instructors` |
-| Roster | `GET/POST/DELETE /courses/{id}/roster…` |
+| Roster | `GET …/roster`, `POST …/roster/members` (add one), `POST …/roster/import`, `DELETE …/roster/{userId}` |
 | Patients | `GET /patients`, `GET/PATCH /patients/{id}…`, `POST …/reset` |
 | Notes | CRUD + `sign` / `cosign` / `return` / `addendum` / `review-queue` |
 | Audit | `GET /audit` |

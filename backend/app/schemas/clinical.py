@@ -179,6 +179,23 @@ class RosterImportOut(BaseModel):
     alreadyEnrolled: int
 
 
+class RosterMemberIn(BaseModel):
+    """Add one person to the course roster (instructor/admin with user:manage)."""
+
+    fullName: str = Field(min_length=1, max_length=200)
+    email: EmailStr
+    universityId: str | None = None
+    discipline: str = "pharmacy"
+    # student (default) or instructor — both require user:manage
+    appRole: Literal["student", "instructor"] = "student"
+
+
+class RosterMemberOut(BaseModel):
+    created: bool
+    alreadyEnrolled: bool
+    user: SessionUserOut
+
+
 class AuditEntryOut(BaseModel):
     id: str
     timestamp: str

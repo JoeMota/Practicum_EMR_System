@@ -116,13 +116,31 @@ export default function LoginPage() {
   const showSso = providers.utepSso;
 
   return (
-    <Box sx={{ minHeight: "100dvh", bgcolor: "background.default", display: "flex", flexDirection: "column" }}>
+    <Box
+      sx={{
+        minHeight: "100dvh",
+        bgcolor: "background.default",
+        display: "flex",
+        flexDirection: "column",
+        backgroundImage: `radial-gradient(1200px 480px at 10% -10%, ${utep.orangeSoft} 0%, transparent 55%), radial-gradient(900px 420px at 100% 0%, rgba(14,34,80,0.06) 0%, transparent 50%)`,
+      }}
+    >
       <Box component="header" sx={{ bgcolor: utep.orange, color: utep.navy, px: { xs: 2, sm: 3.5 }, height: 60, display: "flex", alignItems: "center" }}>
         <Typography component="span" sx={{ fontWeight: 800, fontSize: 18 }}>UTEP EMR</Typography>
       </Box>
 
       <Box component="main" sx={{ flex: 1, display: "grid", placeItems: "center", px: 2, py: 5 }}>
-        <Paper component="section" aria-labelledby="login-title" sx={{ width: "100%", maxWidth: 420, p: { xs: 3, sm: 4 } }}>
+        <Paper
+          component="section"
+          aria-labelledby="login-title"
+          sx={{
+            width: "100%",
+            maxWidth: 420,
+            p: { xs: 3, sm: 4 },
+            animation: "emrFadeIn 240ms ease-out",
+            boxShadow: "0 12px 40px rgba(14,34,80,0.08)",
+          }}
+        >
           <Typography id="login-title" component="h1" variant="h5" sx={{ mb: 0.5 }}>
             {step === "credentials" ? "Sign in" : step === "channel" ? "Verify it's you" : "Enter your code"}
           </Typography>

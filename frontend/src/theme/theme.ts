@@ -39,15 +39,39 @@ export function createAppTheme({ textScale, highContrast }: DisplayPrefs) {
         styleOverrides: {
           body: { fontVariantNumeric: "tabular-nums" },
           "*:focus-visible": { outline: `3px solid ${utep.navy}`, outlineOffset: 2 },
+          "@keyframes emrFadeIn": {
+            from: { opacity: 0, transform: "translateY(6px)" },
+            to: { opacity: 1, transform: "translateY(0)" },
+          },
           "@media (prefers-reduced-motion: reduce)": {
             "*": { animationDuration: "0.01ms !important", transitionDuration: "0.01ms !important" },
           },
         },
       },
-      MuiButton: { defaultProps: { disableElevation: true } },
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        styleOverrides: {
+          root: {
+            transition: "background-color 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease",
+            "&:active:not(:disabled)": { transform: "translateY(1px)" },
+          },
+        },
+      },
       MuiPaper: {
         defaultProps: { elevation: 0 },
-        styleOverrides: { root: { border: `1px solid ${line}` } },
+        styleOverrides: {
+          root: {
+            border: `1px solid ${line}`,
+            transition: "border-color 160ms ease, box-shadow 160ms ease",
+          },
+        },
+      },
+      MuiTableRow: {
+        styleOverrides: {
+          root: {
+            transition: "background-color 120ms ease",
+          },
+        },
       },
       MuiAppBar: { styleOverrides: { root: { border: "none" } } },
       MuiMenu: { styleOverrides: { paper: { boxShadow: "0 8px 24px rgba(14,34,80,0.14)" } } },
@@ -60,6 +84,11 @@ export function createAppTheme({ textScale, highContrast }: DisplayPrefs) {
       MuiTab: { styleOverrides: { root: { textTransform: "none", fontWeight: 600, minHeight: 48 } } },
       MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
       MuiTooltip: { defaultProps: { arrow: true } },
+      MuiLinearProgress: {
+        styleOverrides: {
+          root: { borderRadius: 999, height: 4 },
+        },
+      },
     },
   });
 }
