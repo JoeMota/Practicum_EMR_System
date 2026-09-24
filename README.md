@@ -114,9 +114,32 @@ Production sign-in is **Sign in with UTEP** (Microsoft Entra ID / campus SSO). U
 4. For campus-only login, set `AUTH_REQUIRE_UTEP_SSO=true` (hides demo password MFA)
 5. Users must still be on the course roster (email `@utep.edu` / `@miners.utep.edu`); SSO alone does not create EMR accounts
 
-Optional: configure **Duo Universal Prompt** (`DUO_*`) if you keep local password login and want real Duo instead of the educational `123456` code. Skip this when everyone uses **Sign in with UTEP**.
-
 Check what the UI will offer: `GET /api/v1/auth/providers`.
+
+### Bring-your-own Duo (team / personal Duo, not UTEP campus)
+
+You can use **your own Duo Admin account** so the password login path pushes a real Duo prompt to your phone (no UTEP IT required). This replaces the educational `123456` code.
+
+1. Create a Duo account / trial at [duo.com](https://duo.com) and open the **Duo Admin Panel**.
+2. **Users → Add** a user whose **username is the exact EMR email** (e.g. `jamota@miners.utep.edu`), then enroll that user’s phone (Duo Mobile push or SMS).
+3. **Applications → Protect an Application → Duo Web SDK** (Universal Prompt).  
+   Set the app’s **Redirect URI** to:  
+   `http://localhost:8000/api/v1/auth/duo/callback`  
+   (use your public API URL in deployed environments).
+4. Copy into `backend/.env`:
+
+```bash
+DUO_CLIENT_ID=<Client ID from the Web SDK app>
+DUO_CLIENT_SECRET=<Client secret>
+DUO_API_HOSTNAME=<API hostname, e.g. api-xxxxxxxx.duosecurity.com>
+DUO_REDIRECT_URI=http://localhost:8000/api/v1/auth/duo/callback
+FRONTEND_URL=http://localhost:5173
+```
+
+5. Restart the API. `GET /api/v1/auth/providers` should show `"duo": true`.
+6. Sign in with email + password → UI says **Continue to Duo** → approve on your phone → back into the EMR.
+
+Username in Duo **must match** the EMR login email. Leave `ENTRA_*` empty if you are not using campus SSO yet.
 
 ### JWT notes
 
