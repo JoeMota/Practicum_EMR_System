@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { login } from "../../api/auth";
 import { takeSignedOutNotice } from "../../api/client";
 import { homePathFor } from "../../utils/permissions";
-import { utep } from "../../theme/tokens";
+import { trainingStripe, utep } from "../../theme/tokens";
 import { useAuth } from "./AuthContext";
 
 export default function LoginPage() {
@@ -25,6 +25,10 @@ export default function LoginPage() {
     e.preventDefault();
     if (!email.trim()) {
       setError("Enter your UTEP email to continue.");
+      return;
+    }
+    if (!password) {
+      setError("Enter your password.");
       return;
     }
     setBusy(true);
@@ -47,13 +51,17 @@ export default function LoginPage() {
     <Box sx={{ minHeight: "100dvh", bgcolor: "background.default", display: "flex", flexDirection: "column" }}>
       <Box component="header" sx={{ bgcolor: utep.orange, color: utep.navy, px: { xs: 2, sm: 3.5 }, height: 60, display: "flex", alignItems: "center" }}>
         <Typography component="span" sx={{ fontWeight: 800, fontSize: 18 }}>UTEP EMR</Typography>
+        <Typography component="span" sx={{ ml: 1.5, fontWeight: 600, fontSize: 13, opacity: 0.85, display: { xs: "none", sm: "inline" } }}>
+          Educational medical record
+        </Typography>
       </Box>
+      <Box aria-hidden sx={{ height: 6, background: trainingStripe }} />
 
       <Box component="main" sx={{ flex: 1, display: "grid", placeItems: "center", px: 2, py: 5 }}>
         <Paper component="section" aria-labelledby="login-title" sx={{ width: "100%", maxWidth: 420, p: { xs: 3, sm: 4 } }}>
           <Typography id="login-title" component="h1" variant="h5" sx={{ mb: 0.5 }}>Sign in</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            For UTEP health sciences students and faculty. Every patient here is simulated.
+            For UTEP health sciences students and faculty. Every patient here is simulated training data — never real PHI.
           </Typography>
 
           {notice && <Alert severity="info" sx={{ mb: 2 }}>{notice}</Alert>}
@@ -84,6 +92,18 @@ export default function LoginPage() {
               <Button type="submit" variant="contained" size="large" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in"}
               </Button>
+              {import.meta.env.DEV && (
+                <Alert severity="info" icon={false}>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Demo accounts</Typography>
+                  <Typography variant="body2" component="div">
+                    Student: <Box component="code" sx={{ fontFamily: "inherit", fontWeight: 700 }}>daniel.reyes@miners.utep.edu</Box>
+                    <br />
+                    Instructor: <Box component="code" sx={{ fontFamily: "inherit", fontWeight: 700 }}>gerardo.sillas@utep.edu</Box>
+                    <br />
+                    Password <Box component="code" sx={{ fontFamily: "inherit", fontWeight: 700 }}>practicum-demo</Box>
+                  </Typography>
+                </Alert>
+              )}
             </Stack>
           </Box>
         </Paper>

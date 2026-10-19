@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Box, Breadcrumbs, LinearProgress, Link, Paper, Typography } from "@mui/material";
-import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
+import { Box, Breadcrumbs, Button, LinearProgress, Link, Paper, Typography } from "@mui/material";
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getPatient, updatePatientStatus } from "../../api/patients";
 import { listNotesForPatient } from "../../api/notes";
 import { useSession } from "../auth/AuthContext";
@@ -28,9 +28,10 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function PatientChartPage() {
   const { patientId = "" } = useParams();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "summary") as TabId;
-  const { activeRole } = useSession();
+  const { user, activeRole } = useSession();
   const [statusOpen, setStatusOpen] = useState(false);
 
   const patient = useAsync(() => getPatient(activeRole, patientId), [patientId, activeRole]);
@@ -43,12 +44,26 @@ export default function PatientChartPage() {
   if (patient.error) return <PageError error={patient.error} />;
   if (!patient.data) return <LinearProgress aria-label="Loading chart" />;
   const p = patient.data;
+  const isAuthor = can(activeRole, "note:author");
+  const mine = (notes.data ?? []).filter((n) => n.authorId === user.id);
+  const openNote = mine.find((n) => n.status === "draft" || n.status === "returned");
+  const noteAction = !isAuthor ? undefined : (
+    <Button
+      variant="contained"
+      color="secondary"
+      onClick={() => navigate(openNote ? `/patients/${p.id}/notes/${openNote.id}` : `/patients/${p.id}/notes/new`)}
+    >
+      {openNote ? (openNote.status === "returned" ? "Revise returned note" : "Continue note") : "Start note"}
+    </Button>
+  );
 
   return (
     <Box>
-      <Breadcrumbs sx={{ mb: 2 }}>
-        <Link component={RouterLink} to="/patients" underline="hover">Patients</Link>
-        <Typography color="text.primary">Profile</Typography>
+      <Breadcrumbs aria-label="Breadcrumb" sx={{ mb: 2 }}>
+        <Link component={RouterLink} to="/patients" underline="hover">
+          {activeRole === "student" ? "My patients" : "Patients"}
+        </Link>
+        <Typography color="text.primary">{p.lastName}, {p.firstName}</Typography>
       </Breadcrumbs>
 
       <PatientBanner
@@ -106,7 +121,16 @@ export default function PatientChartPage() {
         )}
         {tab === "notes" && (
           <Paper sx={{ p: 2.5, borderRadius: "16px" }}>
-            <NotesList notes={notes.data ?? []} patientId={p.id} reviewer={!can(activeRole, "note:author")} />
+            {notes.loading ? (
+              <LinearProgress aria-label="Loading notes" />
+            ) : (
+              <NotesList
+                notes={notes.data ?? []}
+                patientId={p.id}
+                reviewer={!isAuthor}
+                emptyAction={noteAction}
+              />
+            )}
           </Paper>
         )}
         {tab === "medications" && <MedicationsTab patient={p} />}

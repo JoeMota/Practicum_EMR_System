@@ -131,7 +131,10 @@ export default function RosterImportPage() {
 
       <Paper sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">Enrolled students ({roster.data?.length ?? 0})</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Remove students at the end of the term. Their accounts stay active for other courses.</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Remove a student if they leave the course. Their account and signed notes stay; they just lose access to this class.
+          Deactivate / reactivate without removing is planned next — for now, re-import restores access.
+        </Typography>
         {(roster.data ?? []).length === 0 ? (
           <EmptyState title="No students yet">Upload a roster to add your class.</EmptyState>
         ) : (
