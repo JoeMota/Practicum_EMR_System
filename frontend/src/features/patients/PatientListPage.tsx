@@ -26,7 +26,7 @@ export default function PatientListPage() {
   const [resetTarget, setResetTarget] = useState<PatientRow>();
   const [unassignTarget, setUnassignTarget] = useState<PatientRow>();
   const [assignOpen, setAssignOpen] = useState(false);
-  const [flash, setFlash] = useState("");
+  const [flash, setFlash] = useState<{ severity: "success" | "error"; text: string }>();
 
   const rows = useAsync(() => listPatients(activeRole, courseId), [activeRole, courseId]);
   const canAssign = can(activeRole, "patient:create");
@@ -47,23 +47,41 @@ export default function PatientListPage() {
 
   const doReset = async () => {
     if (!resetTarget) return;
-    await resetPracticePatient(activeRole, resetTarget.patient.id);
-    setFlash(`${resetTarget.patient.practiceLabel} was reset. Students' practice notes were archived.`);
-    setResetTarget(undefined);
-    rows.reload();
+    try {
+      await resetPracticePatient(activeRole, resetTarget.patient.id);
+      setFlash({
+        severity: "success",
+        text: `${resetTarget.patient.practiceLabel} was reset. Students' practice notes were archived.`,
+      });
+      setResetTarget(undefined);
+      rows.reload();
+    } catch (e) {
+      setResetTarget(undefined);
+      setFlash({ severity: "error", text: (e as Error).message || "Couldn't reset that practice patient." });
+    }
   };
 
   const doUnassign = async () => {
     if (!unassignTarget) return;
-    await unassignCase(activeRole, unassignTarget.patient.id);
-    setFlash(`${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} was removed from ${unassignTarget.ownerName ?? "the student"}.`);
-    setUnassignTarget(undefined);
-    rows.reload();
+    try {
+      await unassignCase(activeRole, unassignTarget.patient.id);
+      setFlash({
+        severity: "success",
+        text: `${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} was removed from ${unassignTarget.ownerName ?? "the student"}.`,
+      });
+      setUnassignTarget(undefined);
+      rows.reload();
+    } catch (e) {
+      setUnassignTarget(undefined);
+      setFlash({ severity: "error", text: (e as Error).message || "Couldn't remove that assignment." });
+    }
   };
 
   return (
     <Box>
-      {flash && <Alert severity="success" onClose={() => setFlash("")} sx={{ mb: 2 }}>{flash}</Alert>}
+      {flash && (
+        <Alert severity={flash.severity} onClose={() => setFlash(undefined)} sx={{ mb: 2 }}>{flash.text}</Alert>
+      )}
       <Paper>
         <Tabs
           value={mode} onChange={(_, v) => setParams({ mode: v, ...(query ? { q: query } : {}) }, { replace: true })}
@@ -86,10 +104,10 @@ export default function PatientListPage() {
           )}
         </Box>
 
-        {rows.loading && <LinearProgress sx={{ mt: 1 }} />}
+        {rows.loading && <LinearProgress sx={{ mt: 1 }} aria-label="Loading patients" />}
 
         <Box sx={{ overflowX: "auto", p: 1 }}>
-          {!rows.loading && visible.length === 0 ? (
+          {rows.loading ? null : visible.length === 0 ? (
             <Box sx={{ p: 2 }}>
               <EmptyState
                 title={query ? "No patients match that search" : mode === "assessment" ? "No cases assigned yet" : "No practice patients in this course"}
@@ -99,13 +117,15 @@ export default function PatientListPage() {
               </EmptyState>
             </Box>
           ) : (
-            <Table>
+            <Table size="small" sx={{ minWidth: { xs: 0, sm: 640 } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Patient</TableCell>
-                  {!isStudent && mode === "assessment" && <TableCell>Student</TableCell>}
-                  <TableCell>Age, sex</TableCell>
-                  <TableCell>Visit</TableCell>
+                  {!isStudent && mode === "assessment" && (
+                    <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Student</TableCell>
+                  )}
+                  <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>Age, sex</TableCell>
+                  <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>Visit</TableCell>
                   <TableCell>{isStudent ? "My note" : "Latest note"}</TableCell>
                   <TableCell align="right"><Box component="span" sx={visuallyHidden}>Actions</Box></TableCell>
                 </TableRow>
@@ -113,34 +133,63 @@ export default function PatientListPage() {
               <TableBody>
                 {visible.map((r) => {
                   const p = r.patient;
+                  const open = () => navigate(`/patients/${p.id}`);
                   return (
-                    <TableRow key={p.id} hover>
-                      <TableCell>
+                    <TableRow
+                      key={p.id}
+                      hover
+                      onClick={open}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
+                      tabIndex={0}
+                      sx={{ cursor: "pointer" }}
+                      aria-label={`Open chart for ${p.lastName}, ${p.firstName}`}
+                    >
+                      <TableCell sx={{ maxWidth: { xs: 140, sm: "none" } }}>
                         <Typography variant="body2" sx={{ fontWeight: 700 }}>
                           {p.lastName}, {p.firstName}
                           {p.practiceLabel && <Chip size="small" label={p.practiceLabel} variant="outlined" sx={{ ml: 1 }} />}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">MRN {p.mrn}</Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: { xs: "block", sm: "none" } }}
+                        >
+                          {p.ageYears} y, {p.sexAtBirth} · {p.status.encounter}
+                        </Typography>
                       </TableCell>
-                      {!isStudent && mode === "assessment" && <TableCell>{r.ownerName}</TableCell>}
-                      <TableCell>{p.ageYears} y, {p.sexAtBirth}</TableCell>
-                      <TableCell>
+                      {!isStudent && mode === "assessment" && (
+                        <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>{r.ownerName}</TableCell>
+                      )}
+                      <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                        {p.ageYears} y, {p.sexAtBirth}
+                      </TableCell>
+                      <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
                         <Chip size="small" label={p.status.encounter} color={p.status.encounter === "Checked in" || p.status.encounter === "In progress" ? "info" : "default"} variant="outlined" />
                       </TableCell>
                       <TableCell>
                         <NoteStatusChip status={r.latestNote?.status} />
                         {r.latestNote && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{formatDateTime(r.latestNote.updatedAt)}</Typography>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: { xs: "none", sm: "block" } }}
+                          >
+                            {formatDateTime(r.latestNote.updatedAt)}
+                          </Typography>
                         )}
                       </TableCell>
-                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                      <TableCell align="right" sx={{ whiteSpace: "nowrap", pl: { xs: 0.5, sm: 2 } }} onClick={(e) => e.stopPropagation()}>
                         {mode === "practice" && can(activeRole, "patient:reset_practice") && (
-                          <Button size="small" color="inherit" onClick={() => setResetTarget(r)} sx={{ mr: 1 }}>Reset</Button>
+                          <Button size="small" color="inherit" onClick={() => setResetTarget(r)} sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}>Reset</Button>
                         )}
                         {mode === "assessment" && canAssign && (
-                          <Button size="small" color="inherit" onClick={() => setUnassignTarget(r)} sx={{ mr: 1 }}>Remove</Button>
+                          <Button size="small" color="inherit" onClick={() => setUnassignTarget(r)} sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}>Remove</Button>
                         )}
-                        <Button size="small" variant="outlined" onClick={() => navigate(`/patients/${p.id}`)}>Open chart</Button>
+                        <Button size="small" variant="contained" onClick={open}>
+                          <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Open chart</Box>
+                          <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>Open</Box>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -188,7 +237,10 @@ export default function PatientListPage() {
           onClose={() => setAssignOpen(false)}
           onAssigned={(assigned) => {
             const names = assigned.map((p) => `${p.lastName}, ${p.firstName}`).join("; ");
-            setFlash(`Assigned ${assigned.length === 1 ? "a case" : `${assigned.length} copies`}: ${names}.`);
+            setFlash({
+              severity: "success",
+              text: `Assigned ${assigned.length === 1 ? "a case" : `${assigned.length} copies`}: ${names}.`,
+            });
             setParams({ mode: "assessment" }, { replace: true });
             rows.reload();
           }}

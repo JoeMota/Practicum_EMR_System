@@ -6,6 +6,8 @@ import FactCheckOutlined from "@mui/icons-material/FactCheckOutlined";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import BadgeOutlined from "@mui/icons-material/BadgeOutlined";
 import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
+import SchoolOutlined from "@mui/icons-material/SchoolOutlined";
+import QueryStatsOutlined from "@mui/icons-material/QueryStatsOutlined";
 import LogoutOutlined from "@mui/icons-material/LogoutOutlined";
 import TextFieldsOutlined from "@mui/icons-material/TextFieldsOutlined";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -26,6 +28,8 @@ const ICON = {
   patients: <PeopleAltOutlined fontSize="small" />,
   roster: <BadgeOutlined fontSize="small" />,
   audit: <HistoryOutlined fontSize="small" />,
+  courses: <SchoolOutlined fontSize="small" />,
+  reports: <QueryStatsOutlined fontSize="small" />,
 };
 
 function useNav(): NavItem[] {
@@ -49,6 +53,8 @@ function useNav(): NavItem[] {
       { to: "/audit", label: "Activity log", icon: ICON.audit },
     ],
     admin: [
+      { to: "/admin/courses", label: "Courses", icon: ICON.courses },
+      { to: "/admin/reports", label: "Reports", icon: ICON.reports },
       { to: "/admin/roster", label: "Roster", icon: ICON.roster },
       { to: "/audit", label: "Activity log", icon: ICON.audit },
       { to: "/patients", label: "Patients", icon: ICON.patients },

@@ -13,6 +13,14 @@ function pick(row: Record<string, unknown>, keys: string[]): string {
   return hit ? String(row[hit] ?? "").trim() : "";
 }
 
+export function validateRosterRow(row: RosterRow): RosterRow {
+  let problem: string | undefined;
+  if (!row.fullName) problem = "Missing name";
+  else if (!/@(miners\.)?utep\.edu$/.test(row.email)) problem = "Email must be @miners.utep.edu or @utep.edu";
+  else if (!/^800\d{6}$/.test(row.universityId)) problem = "ID must be a 9-digit 800 number";
+  return { ...row, problem };
+}
+
 export async function parseRosterFile(file: File): Promise<RosterRow[]> {
   const wb = XLSX.read(await file.arrayBuffer());
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -26,13 +34,10 @@ export async function parseRosterFile(file: File): Promise<RosterRow[]> {
     })
     .filter((r) => r.fullName || r.email || r.universityId)
     .map((r) => {
-      let problem: string | undefined;
-      if (!r.fullName) problem = "Missing name";
-      else if (!/@(miners\.)?utep\.edu$/.test(r.email)) problem = "Email must be @miners.utep.edu or @utep.edu";
-      else if (!/^800\d{6}$/.test(r.universityId)) problem = "ID must be a 9-digit 800 number";
-      else if (seen.has(r.email)) problem = "Duplicate email in this file";
+      const validated = validateRosterRow(r);
+      const problem = validated.problem ?? (seen.has(r.email) ? "Duplicate email in this file" : undefined);
       seen.add(r.email);
-      return { ...r, problem };
+      return { ...validated, problem };
     });
 }
 

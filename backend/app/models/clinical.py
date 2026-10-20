@@ -13,10 +13,12 @@ from app.models.user import User
 
 class Course(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "courses"
+    __table_args__ = (UniqueConstraint("code", "term", name="uq_courses_code_term"),)
 
-    code: Mapped[str] = mapped_column(String(30), unique=True)
+    code: Mapped[str] = mapped_column(String(30))
     title: Mapped[str] = mapped_column(String(200))
     term: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     rubric_file_name: Mapped[str | None] = mapped_column(String(255))
 
 

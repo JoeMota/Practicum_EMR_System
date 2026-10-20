@@ -1,4 +1,4 @@
-import type { Discipline, NoteTemplateId } from "../../types";
+import type { Discipline, NoteTemplateId, Patient } from "../../types";
 
 export type FieldKind = "text" | "textarea" | "icd10" | "medrec";
 
@@ -166,4 +166,73 @@ export function missingRequired(
     .filter((f) => f.required)
     .filter((f) => (f.kind === "icd10" ? diagnosisCount === 0 : !(content[f.id] ?? "").trim()))
     .map((f) => f.id);
+}
+
+function vitalsBlock(patient: Patient): string {
+  if (!patient.vitals.length) return "";
+  return patient.vitals.map((v) => `${v.label}: ${v.value}`).join("; ");
+}
+
+function labsBlock(patient: Patient): string {
+  if (!patient.labs.length) return "";
+  return patient.labs
+    .map((l) => `${l.name} ${l.value} ${l.unit}${l.flag ? ` (${l.flag})` : ""}`)
+    .join("; ");
+}
+
+function historyBlock(patient: Patient): string {
+  const allergy = patient.allergies.length
+    ? patient.allergies.map((a) => `${a.substance}${a.reaction ? ` (${a.reaction})` : ""}`).join("; ")
+    : "NKDA";
+  const meds = patient.medications.map((m) => `${m.name} ${m.dose} ${m.route} ${m.frequency}`).join("; ") || "None listed";
+  return [
+    `PMH: ${patient.problems.map((p) => p.description).join("; ") || "None listed"}`,
+    `PSH: ${patient.surgicalHistory}`,
+    `Medications: ${meds}`,
+    `Allergies: ${allergy}`,
+    `FH: ${patient.familyHistory}`,
+    `SH: ${patient.socialHistory}`,
+  ].join("\n");
+}
+
+/**
+ * Prefill a new note from the chart (DOC-02): chief complaint, vitals/labs, and
+ * history blocks so students start from the encounter instead of a blank form.
+ * Only fills fields the template actually has.
+ */
+export function prefillFromPatient(templateId: NoteTemplateId, patient: Patient): Record<string, string> {
+  const fieldIds = new Set(TEMPLATES[templateId].sections.flatMap((s) => s.fields.map((f) => f.id)));
+  const vitals = vitalsBlock(patient);
+  const labs = labsBlock(patient);
+  const objective = [vitals, labs].filter(Boolean).join(". ");
+  const draft: Record<string, string> = {};
+
+  const put = (id: string, value: string) => {
+    if (fieldIds.has(id) && value.trim()) draft[id] = value.trim();
+  };
+
+  put("reason", patient.chiefComplaint);
+  put("cc", patient.chiefComplaint);
+  put("hpi", patient.hpi);
+  put("subjective", patient.chiefComplaint);
+  put("objective", objective);
+  // Chart vitals/labs only — avoid instructional stubs that look like finished PE text.
+  put("exam", objective);
+  put("history", historyBlock(patient));
+  put("measures", objective || vitals);
+
+  return draft;
+}
+
+/** Seed ICD picks from the chart problem list when codes are present. */
+export function diagnosesFromPatient(patient: Patient): { code: string; label: string }[] {
+  const out: { code: string; label: string }[] = [];
+  const seen = new Set<string>();
+  for (const problem of patient.problems) {
+    const code = problem.code?.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    out.push({ code, label: problem.description || code });
+  }
+  return out;
 }

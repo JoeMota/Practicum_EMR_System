@@ -8,7 +8,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.models.clinical import Appointment, Referral
 from app.models.user import Discipline
 from app.schemas.clinical import AppointmentOut, ReferralCreate, ReferralOut
-from app.services.access import memberships_for, require
+from app.services.access import ensure_course_open, memberships_for, require
 from app.services.audit import log_event
 from app.services.charts import ensure_visible, load_patient
 from app.services.serialize import appointment_out, referral_out
@@ -64,6 +64,7 @@ async def create_referral(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     require(role, "referral:create", "Your role can't create referrals.")
     discipline = await db.scalar(select(Discipline).where(Discipline.code == body.to_discipline))
     if discipline is None:

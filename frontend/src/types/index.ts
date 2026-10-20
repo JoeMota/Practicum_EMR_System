@@ -6,6 +6,7 @@ export type Discipline =
   | "nursing";
 
 export type Role = "student" | "instructor" | "admin" | "front_desk" | "patient";
+export type CourseStatus = "planned" | "active" | "ended" | "archived";
 
 export interface RoleAssignment {
   role: Role;
@@ -19,6 +20,7 @@ export interface User {
   email: string;
   universityId?: string;
   phoneLast4?: string;
+  isActive: boolean;
   roles: RoleAssignment[];
 }
 
@@ -27,6 +29,7 @@ export interface Course {
   code: string;
   title: string;
   term: string;
+  status: CourseStatus;
   instructorIds: string[];
   rubricFileName?: string;
 }

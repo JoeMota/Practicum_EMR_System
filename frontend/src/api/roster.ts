@@ -1,5 +1,6 @@
 import type { Discipline, RosterRow, User } from "../types";
 import { request } from "./client";
+import { listInstructors } from "./courses";
 
 export interface TempPassword {
   email: string;
@@ -16,13 +17,17 @@ export async function listRoster(courseId: string): Promise<User[]> {
   return request<User[]>(`/courses/${courseId}/roster`);
 }
 
-export async function importRoster(courseId: string, discipline: Discipline, rows: RosterRow[]): Promise<RosterImportResult> {
+export async function importRoster(
+  courseId: string, discipline: Discipline, rows: RosterRow[], role: "student" | "instructor" = "student",
+): Promise<RosterImportResult> {
   return request<RosterImportResult>(`/courses/${courseId}/roster/import`, {
     method: "POST",
-    json: { discipline, rows },
+    json: { discipline, rows, role },
   });
 }
 
-export async function removeFromCourse(courseId: string, userId: string): Promise<void> {
-  await request<void>(`/courses/${courseId}/roster/${userId}`, { method: "DELETE" });
+export { listInstructors };
+
+export async function removeFromCourse(courseId: string, userId: string, role: "student" | "instructor" = "student"): Promise<void> {
+  await request<void>(`/courses/${courseId}/roster/${userId}`, { method: "DELETE", query: { role } });
 }

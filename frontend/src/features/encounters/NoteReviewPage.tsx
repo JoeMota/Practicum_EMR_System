@@ -2,8 +2,7 @@ import { useState } from "react";
 import {
   Alert, Box, Breadcrumbs, Button, Divider, LinearProgress, Link, Paper, Stack, TextField, Typography,
 } from "@mui/material";
-import DescriptionOutlined from "@mui/icons-material/DescriptionOutlined";
-import { Link as RouterLink, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { cosignNote, getNote, returnNote } from "../../api/notes";
 import { getPatient } from "../../api/patients";
 import { getCourse } from "../../api/courses";
@@ -19,10 +18,12 @@ import NoteFields from "./components/NoteFields";
 import NoteProgress from "./components/NoteProgress";
 import FeedbackThread from "./components/FeedbackThread";
 import Addenda from "./components/Addenda";
+import CourseRubricPanel from "./components/CourseRubricPanel";
 import { templateName } from "./noteTemplates";
 
 export default function NoteReviewPage() {
   const { noteId = "" } = useParams();
+  const navigate = useNavigate();
   const { activeRole, courseId } = useSession();
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
@@ -54,6 +55,10 @@ export default function NoteReviewPage() {
         : await returnNote(activeRole, note.id, comment);
       load.setData({ note: updated, patient });
       setComment("");
+      const flash = kind === "cosign"
+        ? `Co-signed ${note.authorName}'s note. Record the score in the course gradebook if needed.`
+        : `Returned ${note.authorName}'s note for revision.`;
+      navigate("/review", { replace: true, state: { flash } });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -63,7 +68,7 @@ export default function NoteReviewPage() {
 
   return (
     <Stack spacing={2}>
-      <Breadcrumbs>
+      <Breadcrumbs aria-label="Breadcrumb">
         <Link component={RouterLink} to="/review" underline="hover">Review queue</Link>
         <Typography color="text.primary">{note.authorName}</Typography>
       </Breadcrumbs>
@@ -91,11 +96,7 @@ export default function NoteReviewPage() {
             <Typography component="h2" variant="subtitle1" sx={{ mb: 1 }}>Your review</Typography>
             <NoteProgress note={note} />
 
-            {course.data?.rubricFileName && (
-              <Button startIcon={<DescriptionOutlined />} size="small" sx={{ mt: 1.5 }}>
-                Open rubric ({course.data.rubricFileName})
-              </Button>
-            )}
+            <CourseRubricPanel fileName={course.data?.rubricFileName} />
 
             {note.feedback.length > 0 && (
               <Box sx={{ mt: 2 }}><FeedbackThread items={note.feedback} /></Box>
@@ -107,15 +108,22 @@ export default function NoteReviewPage() {
                 <TextField
                   id="review-comment" label="Feedback to the student" multiline minRows={4} value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  helperText="Required to return the note. Optional when co-signing."
+                  helperText="Required to return the note. Optional when co-signing. You leave comments — the student's wording stays theirs."
                 />
-                <Button variant="contained" size="large" disabled={busy} onClick={() => act("cosign")}>Co-sign note</Button>
-                <Button variant="outlined" color="error" disabled={busy} onClick={() => act("return")}>Return for revision</Button>
+                <Button variant="contained" size="large" disabled={busy} onClick={() => act("cosign")}>
+                  Co-sign and accept
+                </Button>
+                <Button variant="outlined" color="error" disabled={busy} onClick={() => act("return")}>
+                  Return for revision
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  Co-sign locks the note as final. Return unlocks it so the student can revise and resubmit.
+                </Typography>
               </Stack>
             )}
 
             <Alert severity="info" icon={false} sx={{ mt: 2 }}>
-              Record the score in the course gradebook. Grades aren't stored in the EMR, so students never see them here (FERPA).
+              Record the score in the course gradebook (Blackboard). Grades aren't stored in the EMR, so students never see them here (FERPA).
             </Alert>
           </Paper>
 

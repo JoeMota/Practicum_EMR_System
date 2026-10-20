@@ -8,6 +8,7 @@ from app.models.clinical import ClinicalNote, CourseMembership, NoteAddendum, No
 from app.models.user import Discipline, Role, User
 from app.services.access import can, require
 from app.services.audit import log_event
+from app.services.note_prefill import diagnoses_from_patient, prefill_from_patient
 from app.services.charts import utcnow
 
 EDITABLE = {"draft", "returned"}
@@ -50,8 +51,8 @@ async def create_draft(
         mode=patient.mode,
         status="draft",
         version=1,
-        content={},
-        diagnoses=[],
+        content=prefill_from_patient(template_id, patient),
+        diagnoses=diagnoses_from_patient(patient),
     )
     db.add(note)
     await db.flush()

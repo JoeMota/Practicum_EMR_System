@@ -15,7 +15,7 @@ from app.schemas.clinical import (
     QueueItemOut,
     SignRequest,
 )
-from app.services.access import memberships_for, require_course
+from app.services.access import ensure_course_open, memberships_for, require_course
 from app.services.audit import log_event
 from app.services.charts import ensure_visible, load_patient
 from app.services.notes import (
@@ -83,6 +83,7 @@ async def create_note(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     note = await create_draft(
         db,
         author=user,
@@ -152,6 +153,7 @@ async def patch_note(
     patient = await load_patient(db, note.patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     data = body.model_dump(exclude_unset=True)
     saved = await save_draft(db, note, user, body.expected_version, data)
     await db.commit()
@@ -171,6 +173,7 @@ async def sign(
     patient = await load_patient(db, note.patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     signed = await sign_note(db, note, user, body.expected_version, _ip(request), patient.course_id)
     await db.commit()
     return note_out(await _reload(db, signed))
@@ -187,6 +190,7 @@ async def cosign(
 ):
     note = await _reviewable(db, user, role, note_id, request)
     patient = await load_patient(db, note.patient_id)
+    await ensure_course_open(db, patient.course_id)
     await cosign_note(db, note, user, role, body.comment, _ip(request), patient.course_id)
     await db.commit()
     return note_out(await _reload(db, note))
@@ -203,6 +207,7 @@ async def return_for_revision(
 ):
     note = await _reviewable(db, user, role, note_id, request)
     patient = await load_patient(db, note.patient_id)
+    await ensure_course_open(db, patient.course_id)
     await return_note(db, note, user, role, body.comment, _ip(request), patient.course_id)
     await db.commit()
     return note_out(await _reload(db, note))
@@ -223,6 +228,7 @@ async def addendum(
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
     if role == "student" and note.author_id != user.id:
         ensure_can_read(note, user, role)
+    await ensure_course_open(db, patient.course_id)
     await add_addendum(db, note, user, body.body, _ip(request), patient.course_id)
     await db.commit()
     return note_out(await _reload(db, note))

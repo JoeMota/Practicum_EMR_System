@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Discipline, Role, RoleAssignment, User } from "../../types";
+import { courseIdsForRole } from "../../utils/permissions";
 import {
   readSession, refreshAccessToken, SESSION_EVENT, setSignedOutNotice, tokenExpiresAt, writeSession,
   type StoredSession,
@@ -114,8 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       switchRole: (role) => {
         const current = sessionRef.current;
         if (!current) return;
-        const next = current.user.roles.find((r) => r.role === role);
-        const keepCourse = current.courseId && next?.courseIds.includes(current.courseId);
+        const keepCourse = current.courseId && courseIdsForRole(current.user, role).includes(current.courseId);
         persist({ ...current, activeRole: role, courseId: keepCourse ? current.courseId : undefined });
       },
       selectCourse: (courseId) => {

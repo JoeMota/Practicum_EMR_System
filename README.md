@@ -19,21 +19,49 @@ Electronic Medical Record (EMR) system built as our practicum project.
 
 **Development & Testing**
 - Docker Compose
-- Pytest
+- Pytest (backend)
+- GitHub Actions CI
 
 **Deployment**
 - Docker
 - GitHub Actions
 - Managed cloud services
 
+## Features
+
+- Students and instructors can use patient charts, write notes, create referrals, and review notes.
+- Courses move from `planned` to `active`, from `active` to `ended`, and from `ended` to `archived`. Ended courses can return to `active`. Archived courses cannot reopen. Ended and archived courses reject changes to patients, notes, referrals and roster imports. Roster removal stays available so access can be removed after a course ends. Archived courses are hidden from non-admin course lists.
+- The same course code can be used for different terms. Each code and term pair must be unique.
+- The roster page has an Add people card with a single-person form and spreadsheet upload. Imports add students. Admins can also add instructors. Instructors can remove other instructors. They cannot remove themselves or the last instructor.
+- Admins can create courses, manage course status and roster access, deactivate and reactivate accounts, review audit activity, and view course reports with CSV export.
+
+## Roles
+
+| Role | Capabilities |
+| --- | --- |
+| Student | Advance encounters, write and sign notes, and create referrals. |
+| Instructor | Create patients, update patient status, reset practice charts, advance encounters, co-sign or return notes, create referrals, import student rosters, remove instructors, and view audit activity. Instructors must be rostered in a course to use course-scoped actions. They cannot remove themselves or the last instructor. |
+| Admin | Create patients, update patient status, reset practice charts, import and remove course roster members, remove instructors, create courses, manage course status, add instructor access, manage user access, run reports, and view audit activity. Admins need instructor membership to use the Instructor role in a course. |
+
+## API additions
+
+All paths below are under `/api/v1`.
+
+- `POST /courses` creates a course. Admin permission is required.
+- `POST /courses/{course_id}/status` changes course status. Admin permission is required.
+- `POST /courses/{course_id}/roster/import` imports rows with `role=student` or `role=instructor`. Only admins can add instructors.
+- `DELETE /courses/{course_id}/roster/{user_id}?role=student|instructor` removes a course membership. Staff need roster-import permission. Instructor removal also needs instructor-remove permission. The endpoint blocks self-removal and removal of the last instructor.
+- `PATCH /users/{user_id}/active` changes a user's active state. Admin permission is required.
+- `GET /reports/courses/{course_id}?format=csv` returns a course report as CSV. Without `format=csv`, it returns JSON. Admin permission is required for both formats.
+
 ## Project Structure
 
 ```text
-practicum_emr_system/
+Practicum_EMR_System/
 ├── frontend/
 ├── backend/
 ├── docker-compose.yml
-├── .env
+├── .env.example
 └── README.md
 ```
 
@@ -43,7 +71,7 @@ Clone the repository and enter the project:
 
 ```bash
 git clone https://github.com/Gerardos0/Practicum_EMR_System.git
-cd practicum_emr_system
+cd Practicum_EMR_System
 ```
 
 ### Frontend
@@ -75,7 +103,7 @@ cd ..
 
 ### 1. Start the Database
 
-From the main `practicum_emr_system` folder:
+From the repository folder:
 
 ```bash
 docker compose up -d
@@ -88,11 +116,18 @@ Open a terminal:
 ```bash
 cd backend
 source .venv/bin/activate
+alembic upgrade head
 python -m app.scripts.seed
 uvicorn app.main:app --reload
 ```
 
-Demo sign-in: `daniel.reyes@miners.utep.edu` / `practicum-demo`
+The migration command applies all database migrations. The seed command creates demo data. In development, the seed password defaults to `practicum-demo`. Set `SEED_DEMO_PASSWORD` to use another value. The seeded sign-ins are:
+
+- Student: `daniel.reyes@miners.utep.edu`
+- Instructor: `joe.mota@utep.edu`
+- Administrator (also an instructor in seeded courses): `gerardo.sillas@utep.edu`
+
+Use the configured seed demo password for each account.
 
 Backend:
 
@@ -132,6 +167,7 @@ docker compose up -d
 
 cd backend
 source .venv/bin/activate
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -142,7 +178,7 @@ cd frontend
 npm run dev
 ```
 
-The API can also run in Docker. From the project folder:
+The default `docker compose up -d` starts the database. To run the API in Docker, use this command from the project folder:
 
 ```bash
 docker compose --profile api up -d --build
@@ -155,7 +191,24 @@ API:
 http://localhost:8000
 ```
 
-Migrations run when the container starts.
+The API container runs `alembic upgrade head` at startup. It does not seed demo data. Run the seed command separately when needed.
+
+## Testing and CI
+
+Backend tests use Pytest and a separate `emr_test` PostgreSQL database. The test setup creates that database when needed, applies migrations, and seeds demo data. Start the Compose database, then run:
+
+```bash
+cd backend
+pytest -v
+```
+
+GitHub Actions runs backend `pytest -q` with PostgreSQL. It runs `npm ci` and `npm run build` for the frontend on pull requests and pushes to `master`. The repo has no frontend test files or test script. CI does not run lint.
+
+## Known Limitations
+
+- Courses cannot be deleted. Archive a course instead. Archived courses cannot reopen.
+- Admin permissions do not grant instructor membership. To use Instructor mode for a course, an admin must also be rostered there as an instructor.
+- The roster form and spreadsheet upload require a 9-digit 800 number. The API does not independently validate the format.
 
 ## Deploy
 

@@ -137,6 +137,7 @@ interface RequestOptions {
   form?: URLSearchParams;
   query?: Record<string, string | number | undefined>;
   auth?: boolean;
+  responseType?: "json" | "text";
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -174,5 +175,6 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   if (res.status === 204) return undefined as T;
+  if (options.responseType === "text") return (await res.text()) as T;
   return (await res.json()) as T;
 }

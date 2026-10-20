@@ -22,6 +22,7 @@ def course_out(course: Course, instructor_ids: list[str]) -> dict:
         "code": course.code,
         "title": course.title,
         "term": course.term,
+        "status": course.status,
         "instructor_ids": instructor_ids,
         "rubric_file_name": course.rubric_file_name,
     }
@@ -175,7 +176,7 @@ async def user_out(db, user: User) -> dict:
         grouped.setdefault(key, []).append(str(row.course_id))
     roles = [
         {"role": role, "discipline": discipline, "course_ids": sorted(course_ids)}
-        for (role, discipline), course_ids in sorted(grouped.items())
+        for (role, discipline), course_ids in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1] or ""))
     ]
     await db.refresh(user, attribute_names=["roles"])
     if any(item.code == "admin" for item in user.roles) and not any(item["role"] == "admin" for item in roles):
@@ -192,5 +193,6 @@ async def user_out(db, user: User) -> dict:
         "university_id": user.university_id,
         "phone_last4": user.phone_last4,
         "must_change_password": user.must_change_password,
+        "is_active": user.is_active,
         "roles": roles,
     }

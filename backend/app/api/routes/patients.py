@@ -8,7 +8,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.models.clinical import ClinicalNote, Patient
 from app.models.user import User
 from app.schemas.clinical import AssignCase, PatientOut, PatientRowOut, StatusPatch
-from app.services.access import memberships_for, require_course
+from app.services.access import ensure_course_open, memberships_for, require_course
 from app.services.audit import log_event
 from app.services.charts import apply_status, assign_case, ensure_visible, load_patient, owner_name_for, reset_practice, unassign_case
 from app.services.serialize import patient_out
@@ -74,6 +74,7 @@ async def assign_patient(
 ):
     rows = await memberships_for(db, user.id)
     require_course(role, course_id, user, rows)
+    await ensure_course_open(db, course_id)
     source = await load_patient(db, body.source_patient_id)
     owner = await db.get(User, body.owner_id)
     if owner is None:
@@ -127,6 +128,7 @@ async def update_status(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     await apply_status(db, patient, user, role, body.model_dump(exclude_unset=True), _ip(request))
     await db.commit()
     return patient_out(patient, owner_name=owner_name_for(patient, role))
@@ -143,6 +145,7 @@ async def reset_patient(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     await reset_practice(db, patient, user, role, _ip(request))
     await db.commit()
 
@@ -158,5 +161,6 @@ async def unassign_patient(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    await ensure_course_open(db, patient.course_id)
     await unassign_case(db, patient, user, role, _ip(request))
     await db.commit()

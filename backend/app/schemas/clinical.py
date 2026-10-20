@@ -11,6 +11,7 @@ DisciplineCode = Literal[
 ]
 NoteTemplate = Literal["pharmacy_mtm", "pt_daily_soap", "general_soap"]
 RoleCode = Literal["student", "instructor", "admin", "front_desk", "patient"]
+CourseStatus = Literal["planned", "active", "ended", "archived"]
 
 
 class RoleAssignmentOut(APIModel):
@@ -26,6 +27,7 @@ class PublicUser(APIModel):
     university_id: str | None = None
     phone_last4: str | None = None
     must_change_password: bool = False
+    is_active: bool = True
     roles: list[RoleAssignmentOut]
 
 
@@ -34,8 +36,19 @@ class CourseOut(APIModel):
     code: str
     title: str
     term: str
+    status: CourseStatus
     instructor_ids: list[str]
     rubric_file_name: str | None = None
+
+
+class CourseCreate(APIModel):
+    code: str = Field(min_length=1, max_length=30)
+    title: str = Field(min_length=1, max_length=200)
+    term: str = Field(min_length=1, max_length=40)
+
+
+class CourseStatusPatch(APIModel):
+    status: CourseStatus
 
 
 class AllergyOut(APIModel):
@@ -265,6 +278,7 @@ class RosterRowIn(APIModel):
 class RosterImport(APIModel):
     discipline: DisciplineCode
     rows: list[RosterRowIn]
+    role: Literal["student", "instructor"] = "student"
 
 
 class TempPassword(APIModel):

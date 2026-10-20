@@ -59,6 +59,12 @@ PERMISSIONS = {
     "note:cosign": "Co-sign or return a student note",
     "referral:create": "Write a referral",
     "roster:import": "Import or remove students on a course roster",
+    "instructor:remove": "Remove an instructor from a course",
+    "course:create": "Create courses",
+    "course:manage_status": "Start, end, or archive courses",
+    "course:manage_access": "Manage course membership access",
+    "user:manage_access": "Deactivate or reactivate user accounts",
+    "report:run": "Run course reports",
     "audit:view": "Review the audit trail",
 }
 
@@ -179,7 +185,7 @@ async def _seed_courses_and_people(db, roles, disciplines, password: str | None)
 
 
 async def _course(db, code: str, title: str, term: str, rubric: str) -> Course:
-    course = await db.scalar(select(Course).where(Course.code == code))
+    course = await db.scalar(select(Course).where(Course.code == code, Course.term == term))
     if course is None:
         course = Course(code=code, title=title, term=term, rubric_file_name=rubric)
         db.add(course)

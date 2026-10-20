@@ -32,31 +32,48 @@ export default function NotesList({ notes, patientId, reviewer, emptyAction }: P
             <TableCell>Author</TableCell>
             <TableCell>Last updated</TableCell>
             <TableCell>Status</TableCell>
-            <TableCell />
+            <TableCell align="right"><Box component="span" sx={visuallyHidden}>Actions</Box></TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {notes.map((n) => (
-            <TableRow key={n.id} hover>
-              <TableCell>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{TEMPLATES[n.templateId].name}</Typography>
-                <Typography variant="caption" color="text.secondary">{n.diagnoses.map((d) => d.code).join(", ") || "No diagnosis yet"}</Typography>
-              </TableCell>
-              <TableCell>{n.authorName}<Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{disciplineLabel[n.authorDiscipline]}</Typography></TableCell>
-              <TableCell>{formatDateTime(n.updatedAt)}</TableCell>
-              <TableCell><NoteStatusChip status={n.status} /></TableCell>
-              <TableCell align="right">
-                <Button
-                  size="small"
-                  onClick={() => navigate(reviewer ? `/review/${n.id}` : `/patients/${patientId}/notes/${n.id}`)}
-                >
-                  {reviewer && n.status === "pending_review" ? "Review" : "Open"}
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+          {notes.map((n) => {
+            const href = reviewer ? `/review/${n.id}` : `/patients/${patientId}/notes/${n.id}`;
+            const open = () => navigate(href);
+            const label = reviewer && n.status === "pending_review" ? "Review" : "Open";
+            return (
+              <TableRow
+                key={n.id}
+                hover
+                onClick={open}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
+                tabIndex={0}
+                sx={{ cursor: "pointer" }}
+                aria-label={`${label} ${TEMPLATES[n.templateId].name}`}
+              >
+                <TableCell>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{TEMPLATES[n.templateId].name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{n.diagnoses.map((d) => d.code).join(", ") || "No diagnosis yet"}</Typography>
+                </TableCell>
+                <TableCell>
+                  {n.authorName}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{disciplineLabel[n.authorDiscipline]}</Typography>
+                </TableCell>
+                <TableCell>{formatDateTime(n.updatedAt)}</TableCell>
+                <TableCell><NoteStatusChip status={n.status} /></TableCell>
+                <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                  <Button size="small" variant={reviewer && n.status === "pending_review" ? "contained" : "text"} onClick={open}>
+                    {label}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </Box>
   );
 }
+
+const visuallyHidden = {
+  position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap",
+} as const;
