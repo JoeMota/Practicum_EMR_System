@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography,
@@ -15,8 +15,9 @@ import { useSession } from "./useSession";
 
 export default function SelectCoursePage() {
   const navigate = useNavigate();
-  const { user, activeRole, switchRole, selectCourse, signOut } = useSession();
+  const { user, activeRole, courseId, switchRole, selectCourse, signOut } = useSession();
   const [pickedId, setPickedId] = useState<string>();
+  const [opening, setOpening] = useState(false);
   const { data: courses = [], loading, error } = useAsync(() => listCoursesForUser(), [user.id]);
 
   const assignment = user.roles.find((r) => r.role === activeRole);
@@ -29,10 +30,17 @@ export default function SelectCoursePage() {
   const soleId = available.length === 1 ? available[0].id : undefined;
   const picked = pickedId && available.some((c) => c.id === pickedId) ? pickedId : soleId;
 
+  // Navigate only after the session has the course — avoids empty queues/lists on first paint.
+  useEffect(() => {
+    if (!opening || !picked || courseId !== picked) return;
+    setOpening(false);
+    navigate(homePathFor(activeRole), { replace: true });
+  }, [opening, picked, courseId, activeRole, navigate]);
+
   const go = () => {
     if (!picked) return;
     flushSync(() => selectCourse(picked));
-    navigate(homePathFor(activeRole), { replace: true });
+    setOpening(true);
   };
 
   return (
@@ -181,8 +189,8 @@ export default function SelectCoursePage() {
               )}
             </Stack>
 
-            <Button variant="contained" size="large" sx={{ mt: 3, alignSelf: "flex-start" }} disabled={!picked} onClick={go}>
-              {picked ? "Open course" : "Select a course to continue"}
+            <Button variant="contained" size="large" sx={{ mt: 3, alignSelf: "flex-start" }} disabled={!picked || opening} onClick={go}>
+              {opening ? "Opening…" : picked ? "Open course" : "Select a course to continue"}
             </Button>
           </>
         )}
