@@ -1,0 +1,18 @@
+[
+  {
+    "drugs": ["warfarin", "ibuprofen"],
+    "note": "Bleeding risk rises when a blood thinner is combined with an NSAID."
+  },
+  {
+    "drugs": ["lisinopril", "spironolactone"],
+    "note": "Potassium can rise when an ACE inhibitor is combined with spironolactone."
+  },
+  {
+    "drugs": ["sertraline", "tramadol"],
+    "note": "Serotonin syndrome is a teaching concern when an SSRI is combined with tramadol."
+  },
+  {
+    "drugs": ["metformin", "alcohol"],
+    "note": "Alcohol with metformin raises the chance of lactic acidosis in this teaching set."
+  }
+]

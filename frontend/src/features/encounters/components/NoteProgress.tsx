@@ -3,6 +3,14 @@ import type { ClinicalNote } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
 
 export default function NoteProgress({ note }: { note: ClinicalNote }) {
+  if (note.mode === "simulation") {
+    return (
+      <Stepper orientation="vertical" activeStep={note.status === "signed" ? 2 : 0}>
+        <Step><StepLabel>Draft</StepLabel></Step>
+        <Step><StepLabel optional={note.signedAt && <Typography variant="caption">{formatDateTime(note.signedAt)}</Typography>}>Signed and closed</StepLabel></Step>
+      </Stepper>
+    );
+  }
   if (note.mode === "practice") {
     return (
       <Stepper orientation="vertical" activeStep={note.status === "signed" ? 2 : 0}>
@@ -26,7 +34,7 @@ export default function NoteProgress({ note }: { note: ClinicalNote }) {
             </Typography>
           }
         >
-          Pending review
+          Needs review
         </StepLabel>
       </Step>
       <Step completed={note.status === "cosigned"}>

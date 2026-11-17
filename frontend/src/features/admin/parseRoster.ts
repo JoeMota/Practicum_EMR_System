@@ -16,7 +16,7 @@ function pick(row: Record<string, unknown>, keys: string[]): string {
 export function validateRosterRow(row: RosterRow): RosterRow {
   let problem: string | undefined;
   if (!row.fullName) problem = "Missing name";
-  else if (!/@(miners\.)?utep\.edu$/.test(row.email)) problem = "Email must be @miners.utep.edu or @utep.edu";
+  else if (!row.email) problem = "Email is required";
   else if (!/^800\d{6}$/.test(row.universityId)) problem = "ID must be a 9-digit 800 number";
   return { ...row, problem };
 }

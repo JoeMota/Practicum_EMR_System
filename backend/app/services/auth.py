@@ -27,7 +27,7 @@ async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
 
 
 def is_usable(user: User) -> bool:
-    return user.is_active and user.deleted_at is None
+    return user.is_active and user.deleted_at is None and user.archived_at is None and user.purged_at is None
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User | None:

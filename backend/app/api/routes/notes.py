@@ -1,27 +1,41 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession
-from app.models.clinical import ClinicalNote, Patient
+from app.core.config import settings
+from app.models.clinical import ClinicalNote, Course, Patient
 from app.schemas.clinical import (
     AddendumBody,
     CommentBody,
     DraftCreate,
+    InstructorEdit,
+    ScoreWrite,
+    SectionCommentIn,
     DraftPatch,
+    DoseCheckIn,
+    DoseCheckOut,
     NoteOut,
+    SuggestIn,
     QueueItemOut,
     SignRequest,
 )
-from app.services.access import ensure_course_open, memberships_for, require_course
+from app.services.access import ensure_course_open, may_read_note, memberships_for, require_course
+from app.services.assist import suggest_section
 from app.services.audit import log_event
+from app.services.dose_check import check_text
+from app.services.guardrails import guardrail_mode
 from app.services.charts import ensure_visible, load_patient
 from app.services.notes import (
     add_addendum,
+    add_section_comment,
     cosign_note,
     create_draft,
+    instructor_edit_note,
+    save_scores,
     ensure_can_read,
     load_note,
     return_note,
@@ -61,13 +75,19 @@ async def list_notes(
     patient = await load_patient(db, patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
-    query = select(ClinicalNote).where(ClinicalNote.patient_id == patient.id, ClinicalNote.archived.is_(False))
-    if role == "student":
+    query = (
+        select(ClinicalNote)
+        .where(ClinicalNote.patient_id == patient.id, ClinicalNote.archived.is_(False))
+        .options(selectinload(ClinicalNote.discipline))
+    )
+    if role == "student" and patient.mode != "simulation":
         query = query.where(ClinicalNote.author_id == user.id)
     notes = (await db.scalars(query.order_by(ClinicalNote.updated_at.desc()))).all()
     payload = []
     for note in notes:
-        payload.append(note_out(await _reload(db, note)))
+        if not may_read_note(role, rows, patient.course_id, note):
+            continue
+        payload.append(note_out(await _reload(db, note), include_scores=role != "student"))
     return payload
 
 
@@ -92,9 +112,10 @@ async def create_note(
         discipline_code=body.discipline,
         role=role,
         ip=_ip(request),
+        kind=body.kind,
     )
     await db.commit()
-    return note_out(await _reload(db, note))
+    return note_out(await _reload(db, note), include_scores=role != "student")
 
 
 @router.get("/notes/{note_id}", response_model=NoteOut, response_model_exclude_none=True)
@@ -106,10 +127,13 @@ async def get_note(
     role: Annotated[str, Query()],
 ):
     note = await load_note(db, note_id)
+    await db.refresh(note, attribute_names=["discipline"])
     patient = await load_patient(db, note.patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
-    if role == "student" and note.author_id != user.id:
+    if not may_read_note(role, rows, patient.course_id, note):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found.")
+    if role == "student" and note.author_id != user.id and patient.mode != "simulation":
         await log_event(
             db,
             action="note.view",
@@ -127,6 +151,30 @@ async def get_note(
         await db.refresh(item, attribute_names=["author"])
     for item in note.addenda:
         await db.refresh(item, attribute_names=["author"])
+    if note.sensitive or (note.sensitivity or "standard") != "standard":
+        kind = note.sensitivity if note.sensitivity in {"psychiatry", "protected"} else "protected"
+        await log_event(
+            db,
+            action="note.view_psychiatry" if kind == "psychiatry" else "note.view_sensitive",
+            entity_type="note",
+            entity_id=str(note.id),
+            actor_user_id=user.id,
+            course_id=patient.course_id,
+            ip_address=_ip(request),
+            details={"sensitivity": kind},
+            detail=kind,
+        )
+        if kind == "psychiatry":
+            await log_event(
+                db,
+                action="note.view_sensitive",
+                entity_type="note",
+                entity_id=str(note.id),
+                actor_user_id=user.id,
+                course_id=patient.course_id,
+                ip_address=_ip(request),
+                details={"sensitivity": kind},
+            )
     await log_event(
         db,
         action="note.view",
@@ -137,7 +185,7 @@ async def get_note(
         ip_address=_ip(request),
     )
     await db.commit()
-    return note_out(await _reload(db, note))
+    return note_out(await _reload(db, note), include_scores=role != "student")
 
 
 @router.patch("/notes/{note_id}", response_model=NoteOut, response_model_exclude_none=True)
@@ -157,7 +205,7 @@ async def patch_note(
     data = body.model_dump(exclude_unset=True)
     saved = await save_draft(db, note, user, body.expected_version, data)
     await db.commit()
-    return note_out(await _reload(db, saved))
+    return note_out(await _reload(db, saved), include_scores=role != "student")
 
 
 @router.post("/notes/{note_id}/sign", response_model=NoteOut, response_model_exclude_none=True)
@@ -176,7 +224,7 @@ async def sign(
     await ensure_course_open(db, patient.course_id)
     signed = await sign_note(db, note, user, body.expected_version, _ip(request), patient.course_id)
     await db.commit()
-    return note_out(await _reload(db, signed))
+    return note_out(await _reload(db, signed), include_scores=role != "student")
 
 
 @router.post("/notes/{note_id}/cosign", response_model=NoteOut, response_model_exclude_none=True)
@@ -193,7 +241,7 @@ async def cosign(
     await ensure_course_open(db, patient.course_id)
     await cosign_note(db, note, user, role, body.comment, _ip(request), patient.course_id)
     await db.commit()
-    return note_out(await _reload(db, note))
+    return note_out(await _reload(db, note), include_scores=role != "student")
 
 
 @router.post("/notes/{note_id}/return", response_model=NoteOut, response_model_exclude_none=True)
@@ -210,7 +258,24 @@ async def return_for_revision(
     await ensure_course_open(db, patient.course_id)
     await return_note(db, note, user, role, body.comment, _ip(request), patient.course_id)
     await db.commit()
-    return note_out(await _reload(db, note))
+    return note_out(await _reload(db, note), include_scores=role != "student")
+
+
+@router.post("/notes/{note_id}/comments", response_model=NoteOut, response_model_exclude_none=True)
+async def comment(
+    note_id: uuid.UUID,
+    body: SectionCommentIn,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    note = await _reviewable(db, user, role, note_id, request)
+    patient = await load_patient(db, note.patient_id)
+    await ensure_course_open(db, patient.course_id)
+    await add_section_comment(db, note, user, role, body.section_id, body.body, _ip(request), patient.course_id)
+    await db.commit()
+    return note_out(await _reload(db, note), include_scores=role != "student")
 
 
 @router.post("/notes/{note_id}/addenda", response_model=NoteOut, response_model_exclude_none=True)
@@ -231,7 +296,41 @@ async def addendum(
     await ensure_course_open(db, patient.course_id)
     await add_addendum(db, note, user, body.body, _ip(request), patient.course_id)
     await db.commit()
-    return note_out(await _reload(db, note))
+    return note_out(await _reload(db, note), include_scores=role != "student")
+
+
+@router.patch("/notes/{note_id}/instructor-edit", response_model=NoteOut, response_model_exclude_none=True)
+async def instructor_edit(
+    note_id: uuid.UUID,
+    body: InstructorEdit,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    note = await _reviewable(db, user, role, note_id, request)
+    patient = await load_patient(db, note.patient_id)
+    await ensure_course_open(db, patient.course_id)
+    await instructor_edit_note(db, note, user, role, body.model_dump(exclude_unset=True), _ip(request), patient.course_id)
+    await db.commit()
+    return note_out(await _reload(db, note), include_scores=True)
+
+
+@router.put("/notes/{note_id}/scores", response_model=NoteOut, response_model_exclude_none=True)
+async def put_scores(
+    note_id: uuid.UUID,
+    body: ScoreWrite,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    note = await _reviewable(db, user, role, note_id, request)
+    patient = await load_patient(db, note.patient_id)
+    await ensure_course_open(db, patient.course_id)
+    await save_scores(db, note, user, role, body.model_dump(), _ip(request), patient.course_id)
+    await db.commit()
+    return note_out(await _reload(db, note), include_scores=True)
 
 
 @router.get("/review-queue", response_model=list[QueueItemOut], response_model_exclude_none=True)
@@ -257,20 +356,100 @@ async def review_queue(
                 Patient.course_id == course_id,
                 Patient.deleted_at.is_(None),
             )
+            .options(selectinload(ClinicalNote.discipline))
             .order_by(ClinicalNote.updated_at.desc())
         )
     ).all()
     items = []
     for note in notes:
+        if not may_read_note(role, rows, course_id, note):
+            continue
         patient = await load_patient(db, note.patient_id)
         owner = f"{patient.owner.first_name} {patient.owner.last_name}" if patient.owner else None
-        items.append({"note": note_out(await _reload(db, note)), "patient": patient_out(patient, owner_name=owner)})
+        items.append({"note": note_out(await _reload(db, note), include_scores=role != "student"), "patient": patient_out(patient, owner_name=owner, viewer_role=role)})
     return items
 
 
 async def _reviewable(db, user, role: str, note_id: uuid.UUID, request: Request) -> ClinicalNote:
     note = await load_note(db, note_id)
+    await db.refresh(note, attribute_names=["discipline"])
     patient = await load_patient(db, note.patient_id)
     rows = await memberships_for(db, user.id)
     await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    if not may_read_note(role, rows, patient.course_id, note):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found.")
     return note
+
+
+@router.post("/notes/{note_id}/suggest")
+async def suggest_note(
+    note_id: uuid.UUID,
+    body: SuggestIn,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    note = await load_note(db, note_id)
+    await db.refresh(note, attribute_names=["discipline"])
+    if note.sensitive or (note.sensitivity or "standard") != "standard":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found.")
+    patient = await load_patient(db, note.patient_id)
+    rows = await memberships_for(db, user.id)
+    await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    ensure_can_read(note, user, role)
+    course = await db.get(Course, patient.course_id)
+    if course is None or not course.ai_assist or not (settings.AI_API_URL or "").strip():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Assist is off.")
+    context = "\n".join(
+        part
+        for part in (
+            patient.chief_complaint,
+            patient.hpi,
+            "; ".join(f"{item.name} {item.dose}" for item in patient.medications if item.status == "active"),
+        )
+        if part
+    )
+    suggestion = await suggest_section(body.section_id, context)
+    await log_event(
+        db,
+        action="ai.suggest",
+        entity_type="note",
+        entity_id=str(note.id),
+        actor_user_id=user.id,
+        course_id=patient.course_id,
+        ip_address=_ip(request),
+        details={"section": body.section_id, "model": settings.AI_MODEL},
+    )
+    await db.commit()
+    return {"sectionId": body.section_id, "suggestion": suggestion}
+
+
+@router.post("/notes/{note_id}/dose-check", response_model=DoseCheckOut)
+async def dose_check_note(
+    note_id: uuid.UUID,
+    body: DoseCheckIn,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    note = await load_note(db, note_id)
+    await db.refresh(note, attribute_names=["discipline"])
+    patient = await load_patient(db, note.patient_id)
+    rows = await memberships_for(db, user.id)
+    await ensure_visible(db, patient, user, role, rows, request_ip=_ip(request))
+    if not may_read_note(role, rows, patient.course_id, note):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found.")
+    names = [item.name for item in patient.medications if item.status != "discontinued"]
+    flags = check_text(body.text, names)
+    mode = await guardrail_mode(db, patient.course_id)
+    if role != "student" or mode == "off" or not flags:
+        return {"flags": [], "blocked": False, "needs_acknowledgement": False}
+    acknowledged = set(body.acknowledged_flags)
+    missing = any(flag["code"] not in acknowledged for flag in flags)
+    return {
+        "flags": flags,
+        "blocked": mode == "block",
+        "needs_acknowledgement": mode == "acknowledge" and missing,
+    }

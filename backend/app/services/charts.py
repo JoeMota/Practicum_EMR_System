@@ -6,14 +6,24 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical import (
-    Allergy, Appointment, ClinicalNote, CourseMembership, Encounter, LabResult, Medication, Patient, Problem, Vital,
+    Allergy,
+    Appointment,
+    ClinicalNote,
+    CourseMembership,
+    Encounter,
+    LabResult,
+    LungSound,
+    Medication,
+    Patient,
+    Problem,
+    Vital,
 )
 from app.models.user import Role, User
-from app.services.access import full_name, require, require_course
+from app.services.access import can, ensure_student_may_enter, full_name, require, require_course
 from app.services.audit import log_event
 
 LIFECYCLE = {"Active", "Inactive", "Prospective", "Discharged from practice", "Archived", "Deceased"}
-ENCOUNTER_STATUS = {"Scheduled", "Checked in", "In progress", "Checked out", "Closed"}
+ENCOUNTER_STATUS = {"Scheduled", "Checked in", "Roomed", "In progress", "Checked out", "Closed"}
 CARE_SETTING = {"Outpatient", "Inpatient", "Emergency", "Discharged"}
 
 
@@ -26,7 +36,56 @@ async def load_patient(db: AsyncSession, patient_id: uuid.UUID) -> Patient:
 
 async def ensure_visible(db: AsyncSession, patient: Patient, user: User, role: str, rows, *, request_ip: str | None) -> None:
     require_course(role, patient.course_id, user, rows)
-    if role == "student" and not (patient.mode == "practice" or patient.owner_id == user.id):
+    await ensure_student_may_enter(db, role, patient.course_id)
+    if patient.mode == "case" and not can(role, "case:author"):
+        await log_event(
+            db,
+            action="chart.view",
+            entity_type="patient",
+            entity_id=str(patient.id),
+            actor_user_id=user.id,
+            result="denied",
+            course_id=patient.course_id,
+            ip_address=request_ip,
+            detail="Case master is hidden from this role.",
+        )
+        await db.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Case masters are only available to instructors.")
+    if patient.mode == "simulation":
+        from app.services.simulation import station_for
+
+        if role == "front_desk":
+            await log_event(
+                db,
+                action="chart.view",
+                entity_type="patient",
+                entity_id=str(patient.id),
+                actor_user_id=user.id,
+                result="denied",
+                course_id=patient.course_id,
+                ip_address=request_ip,
+                detail="Front desk cannot open a simulation chart.",
+            )
+            await db.commit()
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Front desk can't open a simulation chart.")
+        if role == "student" and await station_for(db, patient.id, user.id) is None:
+            await log_event(
+                db,
+                action="chart.view",
+                entity_type="patient",
+                entity_id=str(patient.id),
+                actor_user_id=user.id,
+                result="denied",
+                course_id=patient.course_id,
+                ip_address=request_ip,
+                detail="Simulation chart is limited to its assigned team.",
+            )
+            await db.commit()
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "You are not assigned to this simulation. Graded charts stay private, and this live chart is only for its team.",
+            )
+    elif role == "student" and not (patient.mode == "practice" or patient.owner_id == user.id):
         await log_event(
             db,
             action="chart.view",
@@ -43,7 +102,7 @@ async def ensure_visible(db: AsyncSession, patient: Patient, user: User, role: s
             status.HTTP_403_FORBIDDEN,
             "This case belongs to another student. Each assessment case is private to the student it was assigned to.",
         )
-    if role not in {"student", "instructor", "admin", "front_desk"}:
+    if role not in {"student", "instructor", "course_coordinator", "admin", "front_desk"}:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Your role can't open charts.")
 
 
@@ -127,6 +186,7 @@ async def reset_practice(db: AsyncSession, patient: Patient, user: User, role: s
     patient.encounter_status = snap["encounter_status"]
     patient.care_setting = snap["care_setting"]
     patient.program = snap.get("program")
+    patient.past_medical_history = snap.get("past_medical_history", "")
     patient.family_history = snap["family_history"]
     patient.surgical_history = snap["surgical_history"]
     patient.social_history = snap["social_history"]
@@ -141,7 +201,7 @@ async def reset_practice(db: AsyncSession, patient: Patient, user: User, role: s
         .returning(ClinicalNote.id)
     )
     count = len(list(archived.all()))
-    db.expire(patient, ["allergies", "medications", "problems", "labs", "vitals", "encounter"])
+    db.expire(patient, ["allergies", "medications", "problems", "labs", "vitals", "lung_sounds", "encounter"])
     await log_event(
         db,
         action="patient.reset_practice",
@@ -154,23 +214,58 @@ async def reset_practice(db: AsyncSession, patient: Patient, user: User, role: s
     )
 
 
+def _child_values(item: dict, fields: tuple[str, ...]) -> dict:
+    values: dict = {}
+    for field in fields:
+        if field not in item or item[field] is None:
+            continue
+        value = item[field]
+        if field == "collected_at" and isinstance(value, str):
+            value = date.fromisoformat(value)
+        elif field in {"recorded_at", "discontinued_at"} and isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        values[field] = value
+    return values
+
+
 async def _replace_children(db: AsyncSession, patient: Patient, snap: dict) -> None:
     specs = (
-        ("allergies", Allergy, ("substance", "reaction", "severity")),
-        ("medications", Medication, ("name", "dose", "route", "frequency", "indication", "adherence")),
+        ("allergies", Allergy, ("substance", "reaction", "severity", "category")),
+        (
+            "medications",
+            Medication,
+            (
+                "name",
+                "dose",
+                "route",
+                "frequency",
+                "indication",
+                "adherence",
+                "access_cost",
+                "status",
+                "prescribed",
+                "is_compound",
+                "compound_ingredients",
+                "compound_vehicle",
+                "compound_reason",
+                "discontinued_at",
+                "rxcui",
+                "generic_name",
+                "brand_names",
+                "flags",
+            ),
+        ),
         ("problems", Problem, ("code", "description", "since")),
         ("labs", LabResult, ("name", "value", "unit", "reference_range", "flag", "collected_at")),
-        ("vitals", Vital, ("label", "value")),
+        ("vitals", Vital, ("label", "value", "recorded_at", "recorded_by_name", "status")),
+        ("lung_sounds", LungSound, ("location", "finding", "notes", "recorded_at", "recorded_by_name", "status")),
     )
     for key, model, fields in specs:
         getattr(patient, key).clear()
     await db.flush()
     for key, model, fields in specs:
         for item in snap.get(key, []):
-            values = {field: item.get(field) for field in fields}
-            if isinstance(values.get("collected_at"), str):
-                values["collected_at"] = date.fromisoformat(values["collected_at"])
-            getattr(patient, key).append(model(**values))
+            getattr(patient, key).append(model(**_child_values(item, fields)))
 
 
 def chart_snapshot(patient: Patient) -> dict:
@@ -181,9 +276,15 @@ def chart_snapshot(patient: Patient) -> dict:
         "encounter_status": patient.encounter_status,
         "care_setting": patient.care_setting,
         "program": patient.program,
+        "past_medical_history": patient.past_medical_history,
         "family_history": patient.family_history,
         "surgical_history": patient.surgical_history,
         "social_history": patient.social_history,
+        "section_locks": patient.section_locks,
+        "prefill_sections": patient.prefill_sections,
+        "unit": patient.unit,
+        "room": patient.room,
+        "bed": patient.bed,
         "encounter": {
             "type": patient.encounter.type,
             "date": patient.encounter.date.isoformat(),
@@ -191,7 +292,13 @@ def chart_snapshot(patient: Patient) -> dict:
         if patient.encounter
         else None,
         "allergies": [
-            {"id": str(a.id), "substance": a.substance, "reaction": a.reaction, "severity": a.severity}
+            {
+                "id": str(a.id),
+                "substance": a.substance,
+                "reaction": a.reaction,
+                "severity": a.severity,
+                "category": a.category,
+            }
             for a in patient.allergies
         ],
         "medications": [
@@ -203,6 +310,18 @@ def chart_snapshot(patient: Patient) -> dict:
                 "frequency": m.frequency,
                 "indication": m.indication,
                 "adherence": m.adherence,
+                "access_cost": m.access_cost,
+                "status": m.status,
+                "prescribed": m.prescribed,
+                "is_compound": bool(m.is_compound),
+                "compound_ingredients": m.compound_ingredients,
+                "compound_vehicle": m.compound_vehicle,
+                "compound_reason": m.compound_reason,
+                "discontinued_at": m.discontinued_at.isoformat() if m.discontinued_at else None,
+                "rxcui": m.rxcui,
+                "generic_name": m.generic_name,
+                "brand_names": list(m.brand_names or []),
+                "flags": list(m.flags or []),
             }
             for m in patient.medications
         ],
@@ -221,7 +340,29 @@ def chart_snapshot(patient: Patient) -> dict:
             }
             for lab in patient.labs
         ],
-        "vitals": [{"id": str(v.id), "label": v.label, "value": v.value} for v in patient.vitals],
+        "vitals": [
+            {
+                "id": str(v.id),
+                "label": v.label,
+                "value": v.value,
+                "recorded_at": v.recorded_at.isoformat() if v.recorded_at else None,
+                "recorded_by_name": v.recorded_by_name,
+                "status": v.status or "recorded",
+            }
+            for v in patient.vitals
+        ],
+        "lung_sounds": [
+            {
+                "id": str(row.id),
+                "location": row.location,
+                "finding": row.finding,
+                "notes": row.notes,
+                "recorded_at": row.recorded_at.isoformat() if row.recorded_at else None,
+                "recorded_by_name": row.recorded_by_name,
+                "status": row.status or "recorded",
+            }
+            for row in patient.lung_sounds
+        ],
     }
 
 
@@ -277,28 +418,52 @@ async def assign_case(
         encounter_status="Scheduled",
         care_setting=source.care_setting,
         program=source.program,
+        past_medical_history=source.past_medical_history,
         family_history=source.family_history,
         surgical_history=source.surgical_history,
         social_history=source.social_history,
+        snapshot=chart_snapshot(source),
         insurance_payer=source.insurance_payer,
         insurance_member_id=source.insurance_member_id,
         insurance_group_number=source.insurance_group_number,
+        insurance_notes=source.insurance_notes,
         emergency_contact_name=source.emergency_contact_name,
         emergency_contact_phone=source.emergency_contact_phone,
         emergency_contact_relationship=source.emergency_contact_relationship,
+        code_status=source.code_status,
+        advance_directive_notes=source.advance_directive_notes,
+        hipaa_on_file=bool(source.hipaa_on_file),
+        hipaa_signed_at=source.hipaa_signed_at,
+        hipaa_note=source.hipaa_note,
         is_training=True,
+        section_locks=dict(source.section_locks or {}),
+        prefill_sections=list(source.prefill_sections or []),
+        unit=source.unit,
+        room=source.room,
+        bed=source.bed,
+        photo=source.photo,
+        photo_content_type=source.photo_content_type,
         encounter=Encounter(
             type=source.encounter.type if source.encounter else "Office visit",
             date=date.today(),
         ),
     )
     for item in source.allergies:
-        clone.allergies.append(Allergy(substance=item.substance, reaction=item.reaction, severity=item.severity))
+        clone.allergies.append(
+            Allergy(substance=item.substance, reaction=item.reaction, severity=item.severity, category=item.category)
+        )
     for item in source.medications:
         clone.medications.append(
             Medication(
                 name=item.name, dose=item.dose, route=item.route, frequency=item.frequency,
-                indication=item.indication, adherence=item.adherence,
+                indication=item.indication, adherence=item.adherence, access_cost=item.access_cost,
+                status=item.status, prescribed=item.prescribed, discontinued_at=item.discontinued_at,
+                is_compound=bool(item.is_compound),
+                compound_ingredients=item.compound_ingredients,
+                compound_vehicle=item.compound_vehicle,
+                compound_reason=item.compound_reason,
+                rxcui=item.rxcui, generic_name=item.generic_name, brand_names=list(item.brand_names or []),
+                flags=list(item.flags or []),
             )
         )
     for item in source.problems:
@@ -311,7 +476,26 @@ async def assign_case(
             )
         )
     for item in source.vitals:
-        clone.vitals.append(Vital(label=item.label, value=item.value))
+        clone.vitals.append(
+            Vital(
+                label=item.label,
+                value=item.value,
+                recorded_at=item.recorded_at,
+                recorded_by_name=item.recorded_by_name,
+                status=item.status or "recorded",
+            )
+        )
+    for item in source.lung_sounds:
+        clone.lung_sounds.append(
+            LungSound(
+                location=item.location,
+                finding=item.finding,
+                notes=item.notes,
+                recorded_at=item.recorded_at,
+                recorded_by_name=item.recorded_by_name,
+                status=item.status or "recorded",
+            )
+        )
     db.add(clone)
     await db.flush()
 
@@ -329,7 +513,10 @@ async def assign_case(
         ip_address=ip,
         detail=f"{full_name(owner)} received {clone.last_name}, {clone.first_name} ({clone.mrn})",
     )
-    await db.refresh(clone, attribute_names=["owner", "allergies", "medications", "problems", "labs", "vitals", "encounter"])
+    await db.refresh(
+        clone,
+        attribute_names=["owner", "allergies", "medications", "problems", "labs", "vitals", "lung_sounds", "encounter"],
+    )
     return clone
 
 
@@ -358,6 +545,7 @@ async def _student_in_course(db: AsyncSession, user_id: uuid.UUID, course_id: uu
         .where(
             CourseMembership.user_id == user_id,
             CourseMembership.course_id == course_id,
+            CourseMembership.deactivated_at.is_(None),
             Role.code == "student",
         )
     )

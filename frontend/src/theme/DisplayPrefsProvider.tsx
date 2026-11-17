@@ -1,9 +1,10 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { createAppTheme, type DisplayPrefs } from "./theme";
+import { DisplayPrefsContext } from "./useDisplayPrefs";
 
 const KEY = "emr.displayPrefs";
-const defaults: DisplayPrefs = { textScale: 1, highContrast: false };
+const defaults: DisplayPrefs = { textScale: 1, highContrast: false, navCollapsed: false };
 
 function load(): DisplayPrefs {
   try {
@@ -12,12 +13,6 @@ function load(): DisplayPrefs {
     return defaults;
   }
 }
-
-interface Ctx {
-  prefs: DisplayPrefs;
-  setPrefs: (p: Partial<DisplayPrefs>) => void;
-}
-const DisplayPrefsContext = createContext<Ctx | null>(null);
 
 export function DisplayPrefsProvider({ children }: { children: ReactNode }) {
   const [prefs, setState] = useState<DisplayPrefs>(load);
@@ -42,10 +37,4 @@ export function DisplayPrefsProvider({ children }: { children: ReactNode }) {
       </ThemeProvider>
     </DisplayPrefsContext.Provider>
   );
-}
-
-export function useDisplayPrefs() {
-  const ctx = useContext(DisplayPrefsContext);
-  if (!ctx) throw new Error("useDisplayPrefs must be used inside DisplayPrefsProvider");
-  return ctx;
 }

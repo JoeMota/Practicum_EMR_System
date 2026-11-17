@@ -10,6 +10,7 @@ export interface TempPassword {
 export interface RosterImportResult {
   added: number;
   alreadyEnrolled: number;
+  reactivated: number;
   temporaryPasswords: TempPassword[];
 }
 
@@ -18,7 +19,7 @@ export async function listRoster(courseId: string): Promise<User[]> {
 }
 
 export async function importRoster(
-  courseId: string, discipline: Discipline, rows: RosterRow[], role: "student" | "instructor" = "student",
+  courseId: string, discipline: Discipline, rows: RosterRow[], role: "student" | "instructor" | "course_coordinator" = "student",
 ): Promise<RosterImportResult> {
   return request<RosterImportResult>(`/courses/${courseId}/roster/import`, {
     method: "POST",
@@ -28,6 +29,22 @@ export async function importRoster(
 
 export { listInstructors };
 
-export async function removeFromCourse(courseId: string, userId: string, role: "student" | "instructor" = "student"): Promise<void> {
+export async function setRosterActive(courseId: string, userId: string, active: boolean): Promise<User> {
+  const action = active ? "reactivate" : "deactivate";
+  return request<User>(`/courses/${courseId}/roster/${userId}/${action}`, { method: "POST" });
+}
+
+export async function removeFromCourse(
+  courseId: string, userId: string, role: "student" | "instructor" | "course_coordinator" = "student",
+): Promise<void> {
   await request<void>(`/courses/${courseId}/roster/${userId}`, { method: "DELETE", query: { role } });
+}
+
+export async function enrollInCourse(
+  courseId: string, userId: string, role: "student" | "instructor" | "course_coordinator", discipline: Discipline,
+): Promise<User> {
+  return request<User>(`/courses/${courseId}/enrollments`, {
+    method: "POST",
+    json: { userId, role, discipline },
+  });
 }

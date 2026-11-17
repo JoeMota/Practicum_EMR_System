@@ -8,7 +8,7 @@ from app.models.clinical import ClinicalNote, CourseMembership, Patient
 from app.models.user import Role
 
 NOTE_STATUSES = ("draft", "pending_review", "signed", "cosigned", "returned")
-PATIENT_MODES = ("practice", "assessment")
+PATIENT_MODES = ("practice", "assessment", "case", "simulation")
 
 
 async def course_report(db: AsyncSession, course_id: uuid.UUID) -> dict:

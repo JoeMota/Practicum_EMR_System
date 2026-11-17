@@ -6,12 +6,12 @@ export default function EmptyState({ title, children, action }: { title: string;
     <Box
       role="status"
       sx={{
-        border: "1px dashed",
-        borderColor: "divider",
+        border: "none",
         borderRadius: 1,
         p: { xs: 3, sm: 4 },
         textAlign: "center",
-        bgcolor: "action.hover",
+        bgcolor: "transparent",
+        boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.divider}`,
         maxWidth: 520,
         mx: "auto",
       }}

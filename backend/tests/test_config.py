@@ -36,5 +36,15 @@ def test_production_rejects_placeholder_secret():
 
 
 def test_production_accepts_a_real_secret():
-    settings = Settings(ENVIRONMENT="production", JWT_SECRET_KEY="a-real-secret-value")
+    settings = Settings(
+        ENVIRONMENT="production",
+        JWT_SECRET_KEY="a-real-secret-value",
+        NOTE_CONTENT_KEY="a-real-note-key",
+    )
     assert settings.JWT_SECRET_KEY == "a-real-secret-value"
+    assert settings.NOTE_CONTENT_KEY == "a-real-note-key"
+
+
+def test_production_rejects_a_missing_note_key():
+    with pytest.raises(ValidationError):
+        Settings(ENVIRONMENT="production", JWT_SECRET_KEY="a-real-secret-value", NOTE_CONTENT_KEY="")

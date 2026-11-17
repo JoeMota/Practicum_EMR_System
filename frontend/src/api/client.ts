@@ -20,6 +20,7 @@ export interface StoredSession {
   activeRole: Role;
   courseId?: string;
   accessToken: string;
+  refreshToken?: string;
   mustChangePassword: boolean;
 }
 
@@ -81,9 +82,14 @@ export function refreshAccessToken(): Promise<string | null> {
   refreshing = (async () => {
     const current = readSession();
     if (!current) return null;
+    if (!current.refreshToken) {
+      writeSession(null);
+      return null;
+    }
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${current.accessToken}` },
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: current.refreshToken }),
     });
     if (!res.ok) {
       writeSession(null);
@@ -91,6 +97,7 @@ export function refreshAccessToken(): Promise<string | null> {
     }
     const body = (await res.json()) as {
       access_token: string;
+      refresh_token?: string;
       mustChangePassword: boolean;
       user: User;
     };
@@ -98,6 +105,7 @@ export function refreshAccessToken(): Promise<string | null> {
     writeSession({
       ...latest,
       accessToken: body.access_token,
+      refreshToken: body.refresh_token ?? latest.refreshToken,
       mustChangePassword: body.mustChangePassword,
       user: body.user,
     });
@@ -135,9 +143,10 @@ interface RequestOptions {
   method?: string;
   json?: unknown;
   form?: URLSearchParams;
+  formData?: FormData;
   query?: Record<string, string | number | undefined>;
   auth?: boolean;
-  responseType?: "json" | "text";
+  responseType?: "json" | "text" | "blob";
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -149,6 +158,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   } else if (options.form) {
     headers.set("Content-Type", "application/x-www-form-urlencoded");
     body = options.form;
+  } else if (options.formData) {
+    body = options.formData;
   }
 
   if (options.auth !== false) {
@@ -176,5 +187,18 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   if (res.status === 204) return undefined as T;
   if (options.responseType === "text") return (await res.text()) as T;
+  if (options.responseType === "blob") return (await res.blob()) as T;
   return (await res.json()) as T;
+}
+
+export async function downloadFile(
+  path: string, filename: string, query?: Record<string, string | number | undefined>,
+): Promise<void> {
+  const blob = await request<Blob>(path, { query, responseType: "blob" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }

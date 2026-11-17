@@ -1,30 +1,40 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, ListItemText, ListSubheader, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import type { Patient, User } from "../../../types";
 import { assignCase, type PatientRow } from "../../../api/patients";
+import { listCases } from "../../../api/cases";
 import { listRoster } from "../../../api/roster";
-import { useSession } from "../../auth/AuthContext";
+import { useSession } from "../../auth/useSession";
 import { useAsync } from "../../../utils/useAsync";
+
+interface Source {
+  id: string;
+  label: string;
+  name: string;
+  group: "Cases" | "Practice patients";
+}
 
 interface Props {
   open: boolean;
   rows: PatientRow[];
+  initialSourceId?: string;
   onClose: () => void;
   onAssigned: (patients: Patient[]) => void;
 }
 
-export default function AssignCaseDialog({ open, rows, onClose, onAssigned }: Props) {
+export default function AssignCaseDialog({ open, rows, initialSourceId = "", onClose, onAssigned }: Props) {
   const { activeRole, courseId } = useSession();
   const roster = useAsync(() => listRoster(courseId), [courseId]);
-  const templates = useMemo(() => templatesFrom(rows), [rows]);
-  const [sourceId, setSourceId] = useState("");
+  const cases = useAsync(() => listCases(activeRole, courseId), [courseId, activeRole]);
+  const sources = useMemo(() => buildSources(cases.data ?? [], rows), [cases.data, rows]);
+  const [sourceId, setSourceId] = useState(initialSourceId);
   const [ownerIds, setOwnerIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const students = roster.data ?? [];
+  const students = (roster.data ?? []).filter((student) => student.rosterStatus !== "inactive");
   const selected = students.filter((s) => ownerIds.includes(s.id));
-  const source = templates.find((t) => t.id === sourceId);
+  const source = sources.find((item) => item.id === sourceId);
 
   const submit = async () => {
     if (!sourceId || ownerIds.length === 0) {
@@ -74,10 +84,19 @@ export default function AssignCaseDialog({ open, rows, onClose, onAssigned }: Pr
               </MenuItem>
             ))}
           </TextField>
-          <TextField select label="Case" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-            {templates.map((t) => (
-              <MenuItem key={t.id} value={t.id}>{t.label}</MenuItem>
-            ))}
+          <TextField
+            select label="Case" value={sourceId} onChange={(e) => setSourceId(e.target.value)}
+            disabled={Boolean(initialSourceId) || cases.loading}
+          >
+            {sources.map((item, index) => {
+              const header = index === 0 || sources[index - 1].group !== item.group
+                ? <ListSubheader key={item.group}>{item.group}</ListSubheader>
+                : null;
+              return [
+                header,
+                <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>,
+              ];
+            })}
           </TextField>
           {selected.length > 0 && source && (
             <Typography variant="body2" color="text.secondary">
@@ -96,21 +115,23 @@ export default function AssignCaseDialog({ open, rows, onClose, onAssigned }: Pr
   );
 }
 
-function templatesFrom(rows: PatientRow[]) {
-  const byKey = new Map<string, PatientRow>();
+function buildSources(cases: { id: string; firstName: string; lastName: string; status: { program?: string } }[], rows: PatientRow[]): Source[] {
+  const authored: Source[] = cases.map((item) => ({
+    id: item.id,
+    name: `${item.lastName}, ${item.firstName}`,
+    label: `${item.lastName}, ${item.firstName}${item.status.program ? ` (${item.status.program})` : ""}`,
+    group: "Cases",
+  }));
+  const practice = new Map<string, PatientRow>();
   for (const row of rows) {
-    const key = row.patient.caseTemplateId;
-    const current = byKey.get(key);
-    if (!current || (row.patient.mode === "practice" && current.patient.mode !== "practice")) {
-      byKey.set(key, row);
-    }
+    if (row.patient.mode !== "practice") continue;
+    if (!practice.has(row.patient.caseTemplateId)) practice.set(row.patient.caseTemplateId, row);
   }
-  return [...byKey.values()].map((row) => {
-    const p = row.patient;
-    return {
-      id: p.id,
-      name: `${p.lastName}, ${p.firstName}`,
-      label: `${p.lastName}, ${p.firstName}${p.practiceLabel ? ` (${p.practiceLabel})` : ""}`,
-    };
-  });
+  const shared: Source[] = [...practice.values()].map((row) => ({
+    id: row.patient.id,
+    name: `${row.patient.lastName}, ${row.patient.firstName}`,
+    label: `${row.patient.lastName}, ${row.patient.firstName} (practice)`,
+    group: "Practice patients",
+  }));
+  return [...authored, ...shared];
 }

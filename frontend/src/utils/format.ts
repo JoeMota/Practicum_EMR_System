@@ -1,5 +1,9 @@
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(iso);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function formatDateTime(iso: string): string {

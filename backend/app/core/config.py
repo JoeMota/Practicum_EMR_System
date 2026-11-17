@@ -38,9 +38,17 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    NOTE_CONTENT_KEY: str = ""
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     CORS_ORIGIN_REGEX: str | None = None
+    LEXICOMP_URL: str | None = None
+    LEXICOMP_API_URL: str | None = None
+    LEXICOMP_API_KEY: str | None = None
+    AI_API_URL: str | None = None
+    AI_API_KEY: str | None = None
+    AI_MODEL: str = "assist"
 
     @model_validator(mode="after")
     def normalize(self) -> "Settings":
@@ -49,6 +57,8 @@ class Settings(BaseSettings):
         self.database_ssl = ssl or self.database_ssl
         if self.ENVIRONMENT == "production" and self.JWT_SECRET_KEY.strip() in _UNSAFE_SECRETS:
             raise ValueError("JWT_SECRET_KEY must be a real secret when ENVIRONMENT=production")
+        if self.ENVIRONMENT == "production" and not self.NOTE_CONTENT_KEY.strip():
+            raise ValueError("NOTE_CONTENT_KEY must be set when ENVIRONMENT=production")
         return self
 
     @property

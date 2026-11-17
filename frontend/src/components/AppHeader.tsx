@@ -3,22 +3,23 @@ import {
   AppBar, Box, Chip, Divider, FormControlLabel, IconButton, InputBase, Menu, MenuItem, Select,
   Switch, ToggleButton, ToggleButtonGroup, Toolbar, Tooltip, Typography,
 } from "@mui/material";
+import MenuOpenRounded from "@mui/icons-material/MenuOpenRounded";
 import MenuRounded from "@mui/icons-material/MenuRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import TextIncreaseOutlined from "@mui/icons-material/TextIncreaseOutlined";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useSession } from "../features/auth/AuthContext";
+import { useSession } from "../features/auth/useSession";
 import { getCourse, listCoursesForUser } from "../api/courses";
-import { useDisplayPrefs } from "../theme/DisplayPrefsProvider";
-import { trainingStripe, utep } from "../theme/tokens";
+import { useDisplayPrefs } from "../theme/useDisplayPrefs";
+import { brandAccentBar, fontDisplay, utep } from "../theme/tokens";
 import { disciplineLabel, roleLabel } from "../utils/labels";
 import { courseIdsForRole, homePathFor, uniqueRoles } from "../utils/permissions";
 import { useAsync } from "../utils/useAsync";
-import { usePageHeadingValue } from "./PageHeading";
+import { usePageHeadingValue } from "./usePageHeading";
 import type { Role } from "../types";
 
 const pickerSx = {
-  bgcolor: "#fff", color: utep.navy, fontWeight: 600, borderRadius: "10px", height: 44,
+  bgcolor: "#fff", color: utep.navy, fontWeight: 600, borderRadius: 1, height: 40,
   "& fieldset": { border: "none" },
 };
 
@@ -37,12 +38,15 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
   const roleCourseIds = courseIdsForRole(user, activeRole);
   const roleCourses = activeRole === "admin"
     ? courses
-    : courses.filter((c) => roleCourseIds.includes(c.id));
+    : courses.filter((c) => roleCourseIds.includes(c.id) && (activeRole !== "student" || c.status !== "ended"));
   const initials = user.fullName.split(" ").map((w) => w[0]).slice(0, 2).join("");
-  const canSearch = activeRole !== "patient";
-  const courseLabel = course.data
-    ? `${course.data.code}: ${course.data.title}${course.data.term ? `, ${course.data.term}` : ""}`
-    : " ";
+  const isAdmin = activeRole === "admin";
+  const canSearch = activeRole !== "patient" && !isAdmin;
+  const courseLabel = isAdmin
+    ? "Program administration"
+    : course.data
+      ? `${course.data.code}: ${course.data.title}${course.data.term ? `, ${course.data.term}` : ""}`
+      : " ";
 
   const search = (e: FormEvent) => {
     e.preventDefault();
@@ -58,22 +62,42 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
     <>
       <AppBar
         position="sticky" elevation={0}
-        sx={{ bgcolor: utep.orange, color: utep.navy, borderBottom: `4px solid ${utep.navy}` }}
+        sx={{ bgcolor: utep.paper, color: utep.navy, borderBottom: `1px solid ${utep.lineSoft}` }}
       >
-        <Toolbar sx={{ gap: 1.5, flexWrap: "wrap", py: 1.5, px: { xs: 2, md: 3 }, minHeight: { md: 76 } }}>
+        <Box aria-hidden sx={{ height: 3, background: brandAccentBar }} />
+        <Toolbar sx={{ gap: 1.25, flexWrap: "wrap", py: 1.25, px: { xs: 2, md: 3 }, minHeight: { md: 64 } }}>
           <IconButton
             aria-label="Open navigation" onClick={onOpenNav}
-            sx={{ display: { md: "none" }, color: utep.navy }}
+            sx={{ display: { md: "none" }, color: utep.navy, minWidth: 44, minHeight: 44 }}
           >
             <MenuRounded />
           </IconButton>
+          <IconButton
+            aria-label={prefs.navCollapsed ? "Expand navigation" : "Collapse navigation"}
+            onClick={() => setPrefs({ navCollapsed: !prefs.navCollapsed })}
+            sx={{ display: { xs: "none", md: "inline-flex" }, color: utep.navy, minWidth: 44, minHeight: 44 }}
+          >
+            {prefs.navCollapsed ? <MenuRounded /> : <MenuOpenRounded />}
+          </IconButton>
 
           <Box sx={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Typography component="h1" sx={{ fontWeight: 800, fontSize: heading ? 22 : 16, lineHeight: 1.2, color: utep.navy }}>
+            <Typography
+              component="h1"
+              sx={{
+                fontFamily: fontDisplay,
+                fontWeight: 700,
+                fontSize: heading ? 22 : 16,
+                lineHeight: 1.2,
+                color: utep.navy,
+                letterSpacing: "-0.02em",
+              }}
+            >
               {heading?.title ?? courseLabel}
             </Typography>
             {heading && (
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: utep.navy, opacity: 0.85 }}>{courseLabel}</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: utep.ink2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {courseLabel}
+              </Typography>
             )}
           </Box>
 
@@ -81,12 +105,17 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
             <Box
               component="form" role="search" onSubmit={search}
               sx={{
-                flex: "0 1 280px", display: "flex", alignItems: "center", gap: 1, px: 1.75, height: 44,
-                bgcolor: "#fff", borderRadius: "999px", color: "text.secondary",
+                flex: "0 1 280px", display: "flex", alignItems: "center", gap: 1, px: 1.5, height: 40,
+                bgcolor: "rgba(14,34,80,0.04)", borderRadius: 1, color: "text.secondary",
+                boxShadow: `inset 0 0 0 1px ${utep.lineSoft}`,
               }}
             >
-              <SearchRounded fontSize="small" />
+              <SearchRounded fontSize="small" aria-hidden />
+              <Typography component="label" htmlFor="patient-search" sx={{ fontSize: 13, fontWeight: 700, color: utep.navy }}>
+                Search
+              </Typography>
               <InputBase
+                id="patient-search"
                 value={q} onChange={(e) => {
                   const value = e.target.value;
                   setQ(value);
@@ -99,13 +128,13 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
                   navigate(qs ? `/patients?${qs}` : "/patients", { replace: true });
                 }}
                 sx={{ flex: 1, fontSize: 14 }}
-                placeholder={activeRole === "student" ? "Search name or MRN" : "Search patient, MRN, or student"}
+                placeholder={activeRole === "student" ? "Search name, MRN, or date of birth" : "Search patient, MRN, date of birth, or student"}
                 inputProps={{ "aria-label": "Search patients" }}
               />
             </Box>
           )}
 
-          {courseId && roleCourses.length > 1 && (
+          {!isAdmin && courseId && roleCourses.length > 1 && (
             <Select
               size="small" value={courseId} inputProps={{ "aria-label": "Course" }}
               onChange={(e) => {
@@ -127,8 +156,8 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
                 switchRole(role);
                 navigate(homePathFor(role));
               }}
-              sx={{ ...pickerSx, bgcolor: utep.navy, color: "#fff", borderRadius: "999px", "& .MuiSvgIcon-root": { color: "#fff" } }}
-              renderValue={(v) => `Acting as: ${roleLabel[v as Role]}`}
+              sx={{ ...pickerSx, bgcolor: utep.navy, color: "#fff", "& .MuiSvgIcon-root": { color: "#fff" } }}
+              renderValue={(v) => roleLabel[v as Role]}
             >
               {roles.map((role) => <MenuItem key={role} value={role}>{roleLabel[role]}</MenuItem>)}
             </Select>
@@ -158,24 +187,23 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
             </Box>
           </Menu>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Box sx={{ textAlign: "right", lineHeight: 1.25, display: { xs: "none", sm: "block" } }}>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>{user.fullName}</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                 {roleLabel[activeRole]}{discipline ? `, ${disciplineLabel[discipline]}` : ""}
               </Typography>
             </Box>
             <Box
               aria-hidden
-              sx={{ width: 42, height: 42, borderRadius: "50%", bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 700 }}
+              sx={{ width: 36, height: 36, borderRadius: 1, bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}
             >
               {initials}
             </Box>
-            <Chip label="Training" size="small" sx={{ bgcolor: utep.navy, color: "#fff", display: { xs: "none", md: "flex" } }} />
+            <Chip label="Training" size="small" variant="outlined" sx={{ display: { xs: "none", md: "flex" }, borderColor: utep.line }} />
           </Box>
         </Toolbar>
       </AppBar>
-      <Box aria-hidden sx={{ height: 4, background: trainingStripe }} />
     </>
   );
 }

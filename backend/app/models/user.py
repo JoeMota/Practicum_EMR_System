@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -57,9 +57,18 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    acting_role: Mapped[str | None] = mapped_column(String(40))
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    portal_patient_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("patients.id"))
 
     discipline_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("disciplines.id"))
 
     discipline: Mapped[Discipline | None] = relationship()
     roles: Mapped[list[Role]] = relationship(secondary=user_roles)
-    memberships: Mapped[list["CourseMembership"]] = relationship(back_populates="user")
+    memberships: Mapped[list["CourseMembership"]] = relationship(
+        back_populates="user", foreign_keys="CourseMembership.user_id"
+    )

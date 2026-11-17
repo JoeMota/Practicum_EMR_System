@@ -3,11 +3,17 @@ import pytest
 DEMO = "practicum-demo"
 
 
-async def login(client, email: str, password: str = DEMO):
+async def login(client, email: str, password: str = DEMO, role: str | None = None):
     response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
     body = response.json()
-    return {"Authorization": f"Bearer {body['access_token']}"}, body
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+    if role:
+        switched = await client.post("/api/v1/auth/acting-role", headers=headers, json={"role": role})
+        assert switched.status_code == 200, switched.text
+        body = switched.json()
+        headers = {"Authorization": f"Bearer {body['access_token']}"}
+    return headers, body
 
 
 async def course_id(client, headers, code: str) -> str:
@@ -24,9 +30,28 @@ async def patient_by_mrn(client, headers, course: str, role: str, mrn: str) -> d
 
 
 @pytest.mark.asyncio
-async def test_login_rejects_non_utep_email(client):
+async def test_login_accepts_non_utep_email_format_but_rejects_unknown_account(client):
     response = await client.post("/api/v1/auth/login", data={"username": "ada@example.com", "password": "whatever"})
-    assert response.status_code == 400
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_roster_import_allows_non_utep_email_addresses(client):
+    headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    course = await course_id(client, headers, "PHAR 5320")
+
+    response = await client.post(
+        f"/api/v1/courses/{course}/roster/import",
+        headers=headers,
+        json={
+            "discipline": "pharmacy",
+            "role": "student",
+            "rows": [{"fullName": "Test Student", "email": "student@example.com", "universityId": "800123456"}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["added"] == 1
 
 
 @pytest.mark.asyncio
@@ -57,7 +82,7 @@ async def test_student_cannot_see_another_students_assessment(client):
 
 @pytest.mark.asyncio
 async def test_admin_course_lifecycle_and_report(client):
-    headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     created = await client.post(
         "/api/v1/courses",
         headers=headers,
@@ -111,17 +136,22 @@ async def test_admin_course_lifecycle_and_report(client):
         f"/api/v1/courses/{course['id']}/status", headers=headers, json={"status": "archived"}
     )
     assert archived.status_code == 200
-    archived_blocked = await client.post(
+    still_archived = await client.post(
+        f"/api/v1/courses/{course['id']}/status", headers=headers, json={"status": "planned"}
+    )
+    assert still_archived.status_code == 409
+    retrieved = await client.post(
         f"/api/v1/courses/{course['id']}/status", headers=headers, json={"status": "active"}
     )
-    assert archived_blocked.status_code == 409
+    assert retrieved.status_code == 200
+    assert retrieved.json()["status"] == "active"
     listed = await client.get("/api/v1/courses", headers=headers)
-    assert any(item["id"] == course["id"] and item["status"] == "archived" for item in listed.json())
+    assert any(item["id"] == course["id"] and item["status"] == "active" for item in listed.json())
 
 
 @pytest.mark.asyncio
 async def test_same_course_code_allowed_in_different_terms(client):
-    headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     first = await client.post(
         "/api/v1/courses",
         headers=headers,
@@ -155,7 +185,7 @@ async def test_same_course_code_allowed_in_different_terms(client):
 
 @pytest.mark.asyncio
 async def test_admin_can_import_single_instructor_and_student(client):
-    headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     created = await client.post(
         "/api/v1/courses",
         headers=headers,
@@ -218,31 +248,37 @@ async def test_admin_can_import_single_instructor_and_student(client):
 
 @pytest.mark.asyncio
 async def test_instructor_removal_guards(client):
-    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin_headers, admin = await login(client, "gerardo.sillas@utep.edu", role="admin")
     course = await course_id(client, admin_headers, "PHAR 5320")
     instructor_list = await client.get(f"/api/v1/courses/{course}/instructors", headers=admin_headers)
     instructor_ids = [person["id"] for person in instructor_list.json()]
     assert len(instructor_ids) >= 2
 
     instructor_headers, instructor = await login(client, "joe.mota@utep.edu")
-    target_user_id = next(user_id for user_id in instructor_ids if user_id != instructor["user"]["id"])
-    other_instructor_removed = await client.delete(
-        f"/api/v1/courses/{course}/roster/{target_user_id}",
+    instructor_denied = await client.delete(
+        f"/api/v1/courses/{course}/roster/{admin['user']['id']}",
         headers=instructor_headers,
+        params={"role": "instructor"},
+    )
+    assert instructor_denied.status_code == 403
+
+    other_instructor_removed = await client.delete(
+        f"/api/v1/courses/{course}/roster/{instructor['user']['id']}",
+        headers=admin_headers,
         params={"role": "instructor"},
     )
     assert other_instructor_removed.status_code == 204
 
     self_remove = await client.delete(
-        f"/api/v1/courses/{course}/roster/{instructor['user']['id']}",
-        headers=instructor_headers,
+        f"/api/v1/courses/{course}/roster/{admin['user']['id']}",
+        headers=admin_headers,
         params={"role": "instructor"},
     )
     assert self_remove.status_code == 409
 
     student_headers, _ = await login(client, "daniel.reyes@miners.utep.edu")
     student_attempt = await client.delete(
-        f"/api/v1/courses/{course}/roster/{target_user_id}",
+        f"/api/v1/courses/{course}/roster/{admin['user']['id']}",
         headers=student_headers,
         params={"role": "instructor"},
     )
@@ -251,19 +287,18 @@ async def test_instructor_removal_guards(client):
 
 @pytest.mark.asyncio
 async def test_cannot_remove_last_instructor(client):
-    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu")
-    joe_headers, joe = await login(client, "joe.mota@utep.edu")
+    admin_headers, admin = await login(client, "gerardo.sillas@utep.edu", role="admin")
     course = await course_id(client, admin_headers, "PHAR 5320")
     instructors = await client.get(f"/api/v1/courses/{course}/instructors", headers=admin_headers)
     assert instructors.status_code == 200, instructors.text
-    joe_id = joe["user"]["id"]
-    other_instructor_ids = [person["id"] for person in instructors.json() if person["id"] != joe_id]
+    admin_id = admin["user"]["id"]
+    other_instructor_ids = [person["id"] for person in instructors.json() if person["id"] != admin_id]
     assert other_instructor_ids
 
     for instructor_id in other_instructor_ids:
         removed = await client.delete(
             f"/api/v1/courses/{course}/roster/{instructor_id}",
-            headers=joe_headers,
+            headers=admin_headers,
             params={"role": "instructor"},
         )
         assert removed.status_code == 204, removed.text
@@ -271,10 +306,10 @@ async def test_cannot_remove_last_instructor(client):
     remaining = await client.get(f"/api/v1/courses/{course}/instructors", headers=admin_headers)
     assert remaining.status_code == 200, remaining.text
     assert len(remaining.json()) == 1
-    assert remaining.json()[0]["id"] == joe_id
+    assert remaining.json()[0]["id"] == admin_id
 
     final_removal = await client.delete(
-        f"/api/v1/courses/{course}/roster/{joe_id}",
+        f"/api/v1/courses/{course}/roster/{admin_id}",
         headers=admin_headers,
         params={"role": "instructor"},
     )
@@ -284,12 +319,12 @@ async def test_cannot_remove_last_instructor(client):
     remaining_after_rejection = await client.get(f"/api/v1/courses/{course}/instructors", headers=admin_headers)
     assert remaining_after_rejection.status_code == 200, remaining_after_rejection.text
     assert len(remaining_after_rejection.json()) == 1
-    assert remaining_after_rejection.json()[0]["id"] == joe_id
+    assert remaining_after_rejection.json()[0]["id"] == admin_id
 
 
 @pytest.mark.asyncio
 async def test_ended_course_rejects_writes(client):
-    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     course = await course_id(client, admin_headers, "PHAR 5320")
     student_headers, _ = await login(client, "daniel.reyes@miners.utep.edu")
     rosa = await patient_by_mrn(client, student_headers, course, "student", "TR-20001")
@@ -312,13 +347,13 @@ async def test_ended_course_rejects_writes(client):
         params={"role": "student"},
         json=payload,
     )
-    assert blocked.status_code == 409
-    assert blocked.json()["detail"] == "This course has ended and cannot be edited."
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"] == "This course has ended."
 
 
 @pytest.mark.asyncio
 async def test_archived_courses_are_hidden_from_non_admins(client):
-    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin_headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     created = await client.post(
         "/api/v1/courses",
         headers=admin_headers,
@@ -344,7 +379,7 @@ async def test_archived_courses_are_hidden_from_non_admins(client):
 
 @pytest.mark.asyncio
 async def test_deactivated_user_cannot_login_until_reactivated(client):
-    admin_headers, admin = await login(client, "gerardo.sillas@utep.edu")
+    admin_headers, admin = await login(client, "gerardo.sillas@utep.edu", role="admin")
     deactivate = await client.patch(
         f"/api/v1/users/{admin['user']['id']}/active",
         headers=admin_headers,
@@ -386,7 +421,7 @@ async def test_deactivated_user_cannot_login_until_reactivated(client):
 
 @pytest.mark.asyncio
 async def test_student_cannot_manage_courses_or_users(client):
-    course_headers, _ = await login(client, "gerardo.sillas@utep.edu")
+    course_headers, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     course = await course_id(client, course_headers, "PHAR 5320")
     student_headers, student = await login(client, "daniel.reyes@miners.utep.edu")
     instructor_headers, _ = await login(client, "joe.mota@utep.edu")
@@ -542,12 +577,59 @@ async def test_note_sign_version_and_cosign(client):
 
 
 @pytest.mark.asyncio
+async def test_cpt_diagnosis_links_are_optional_and_legacy_codes_load(client):
+    student, _ = await login(client, "daniel.reyes@miners.utep.edu")
+    course = await course_id(client, student, "PHAR 5320")
+    patient = await patient_by_mrn(client, student, course, "student", "TR-20001")
+    created = await client.post(
+        f"/api/v1/patients/{patient['id']}/notes",
+        headers=student,
+        params={"role": "student"},
+        json={"templateId": "pharmacy_soap", "discipline": "pharmacy"},
+    )
+    assert created.status_code == 200, created.text
+    note_id = created.json()["id"]
+
+    linked = await client.patch(
+        f"/api/v1/notes/{note_id}",
+        headers=student,
+        params={"role": "student"},
+        json={
+            "expectedVersion": created.json()["version"],
+            "cptCodes": [{"code": "99213", "label": "Office visit", "diagnosisCodes": ["I10", "E11.9"]}],
+        },
+    )
+    assert linked.status_code == 200, linked.text
+    assert linked.json()["cptCodes"][0]["diagnosisCodes"] == ["I10", "E11.9"]
+
+    legacy = await client.patch(
+        f"/api/v1/notes/{note_id}",
+        headers=student,
+        params={"role": "student"},
+        json={"expectedVersion": linked.json()["version"], "cptCodes": [{"code": "99212", "label": "Office visit"}]},
+    )
+    assert legacy.status_code == 200, legacy.text
+    assert legacy.json()["cptCodes"][0]["diagnosisCodes"] == []
+    signed = await client.post(
+        f"/api/v1/notes/{note_id}/sign",
+        headers=student,
+        params={"role": "student"},
+        json={"expectedVersion": legacy.json()["version"]},
+    )
+    assert signed.status_code == 200, signed.text
+
+
+@pytest.mark.asyncio
 async def test_return_and_resubmit(client):
     instructor, _ = await login(client, "gerardo.sillas@utep.edu")
     sam_headers, _ = await login(client, "sam.torres@miners.utep.edu")
     course = await course_id(client, instructor, "PHAR 5320")
     queue = await client.get("/api/v1/review-queue", headers=instructor, params={"course_id": course, "role": "instructor"})
-    pending = next(item["note"] for item in queue.json() if item["note"]["status"] == "pending_review")
+    pending = next(
+        item["note"]
+        for item in queue.json()
+        if item["note"]["status"] == "pending_review" and item["patient"]["mrn"] == "TR-10057-ST"
+    )
     returned = await client.post(
         f"/api/v1/notes/{pending['id']}/return",
         headers=instructor,
@@ -596,9 +678,11 @@ async def test_roster_import_and_audit(client):
         },
     )
     assert again.json()["alreadyEnrolled"] == 1
-    student, _ = await login(client, "daniel.reyes@miners.utep.edu")
-    hidden = await client.get("/api/v1/audit", headers=student, params={"course_id": course, "role": "student"})
-    assert hidden.status_code == 403
+    student, me = await login(client, "daniel.reyes@miners.utep.edu")
+    # Students may read their own activity (filtered), not the full course audit.
+    mine = await client.get("/api/v1/audit", headers=student, params={"course_id": course, "role": "student"})
+    assert mine.status_code == 200, mine.text
+    assert all(item["actorId"] == me["user"]["id"] for item in mine.json())
     audit = await client.get("/api/v1/audit", headers=headers, params={"course_id": course, "role": "instructor"})
     assert audit.status_code == 200
     actions = {item["action"] for item in audit.json()}

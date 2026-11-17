@@ -3,7 +3,7 @@ import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuI
 import type { CareSetting, EncounterStatus, LifecycleStatus, Patient, PatientStatus } from "../../../types";
 
 const LIFECYCLE: LifecycleStatus[] = ["Active", "Inactive", "Prospective", "Discharged from practice", "Archived", "Deceased"];
-const ENCOUNTER: EncounterStatus[] = ["Scheduled", "Checked in", "In progress", "Checked out", "Closed"];
+const ENCOUNTER: EncounterStatus[] = ["Scheduled", "Checked in", "Roomed", "In progress", "Checked out", "Closed"];
 const SETTING: CareSetting[] = ["Outpatient", "Inpatient", "Emergency", "Discharged"];
 
 interface Props {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Box, LinearProgress, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
 import AssignmentOutlined from "@mui/icons-material/AssignmentOutlined";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
@@ -5,11 +6,13 @@ import ReplayOutlined from "@mui/icons-material/ReplayOutlined";
 import ScienceOutlined from "@mui/icons-material/ScienceOutlined";
 import { Link as RouterLink } from "react-router-dom";
 import { listPatients, type PatientRow } from "../../api/patients";
-import { useSession } from "../auth/AuthContext";
+import { caseloadHref, matchesCaseload } from "../patients/caseload";
+import { useSession } from "../auth/useSession";
 import { useAsync } from "../../utils/useAsync";
 import EmptyState from "../../components/EmptyState";
 import NoteStatusChip from "../../components/NoteStatusChip";
-import { DAY_MS, Panel, StatCard, StatGrid, VisitChip, patientName, since } from "./components/DashboardParts";
+import { Panel, StatCard, StatGrid } from "./components/DashboardParts";
+import { DAY_MS, patientName, since } from "./dashboardFormat";
 import { utep } from "../../theme/tokens";
 
 function continueTo(row: PatientRow) {
@@ -19,17 +22,18 @@ function continueTo(row: PatientRow) {
 export default function StudentDashboard() {
   const { activeRole, courseId } = useSession();
   const patients = useAsync(() => listPatients(activeRole, courseId), [activeRole, courseId]);
+  const [now] = useState(() => Date.now());
 
   if (patients.loading && !patients.data) return <LinearProgress />;
 
   const rows = patients.data ?? [];
-  const now = Date.now();
-  const assessment = rows.filter((r) => r.patient.mode === "assessment");
-  const practice = rows.filter((r) => r.patient.mode === "practice");
-  const inProgress = rows.filter((r) => r.patient.status.encounter === "In progress" || r.patient.status.encounter === "Checked in");
-  const returned = rows.filter((r) => r.latestNote?.status === "returned");
-  const pending = rows.filter((r) => r.latestNote?.status === "pending_review");
+  const assessment = rows.filter((r) => matchesCaseload(r, "assigned"));
+  const practice = rows.filter((r) => matchesCaseload(r, "practice"));
+  const inProgress = rows.filter((r) => matchesCaseload(r, "in-clinic"));
+  const returned = rows.filter((r) => matchesCaseload(r, "returned"));
+  const pending = rows.filter((r) => matchesCaseload(r, "awaiting"));
   const flagged = rows.filter((r) => r.patient.labs.some((l) => l.flag));
+  const doseFlags = rows.filter((r) => (r.openFlagCount ?? 0) > 0);
   const recentNotes = [...rows]
     .filter((r) => r.latestNote)
     .sort((a, b) => new Date(b.latestNote!.updatedAt).getTime() - new Date(a.latestNote!.updatedAt).getTime())
@@ -47,35 +51,42 @@ export default function StudentDashboard() {
           label="Assigned patients"
           value={assessment.length}
           tone="navy"
-          to="/patients"
+          to={caseloadHref("assigned")}
           icon={<PeopleAltOutlined fontSize="small" />}
         />
         <StatCard
           label="In clinic now"
           value={inProgress.length}
           tone="orange"
-          to="/patients"
+          to={caseloadHref("in-clinic")}
           icon={<PeopleAltOutlined fontSize="small" />}
         />
         <StatCard
           label="Returned notes"
           value={returned.length}
           tone="orangeSoft"
-          to={returned.length > 0 ? "/patients" : undefined}
+          to={caseloadHref("returned")}
           icon={<ReplayOutlined fontSize="small" />}
         />
         <StatCard
-          label="Awaiting review"
+          label="Needs review"
           value={pending.length}
           tone="navySoft"
-          to={pending.length > 0 ? "/patients" : undefined}
+          to={caseloadHref("awaiting")}
+          icon={<AssignmentOutlined fontSize="small" />}
+        />
+        <StatCard
+          label="Items to check"
+          value={doseFlags.length}
+          tone="orange"
+          to={caseloadHref("flags")}
           icon={<AssignmentOutlined fontSize="small" />}
         />
         <StatCard
           label="Practice cases"
           value={practice.length}
           tone="navy"
-          to="/patients?mode=practice"
+          to={caseloadHref("practice")}
           icon={<ScienceOutlined fontSize="small" />}
         />
       </StatGrid>
@@ -104,7 +115,7 @@ export default function StudentDashboard() {
                     sx={{ textDecoration: "none", "&:hover td": { color: utep.navy } }}
                   >
                     <TableCell sx={{ fontWeight: 600 }}>{patientName(r.patient)}</TableCell>
-                    <TableCell><VisitChip status={r.patient.status.encounter} /></TableCell>
+                    <TableCell>{r.patient.status.encounter}</TableCell>
                     <TableCell><NoteStatusChip status={r.latestNote?.status} /></TableCell>
                     <TableCell>{r.latestNote ? since(r.latestNote.updatedAt, now) : "—"}</TableCell>
                   </TableRow>

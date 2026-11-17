@@ -1,5 +1,7 @@
 from datetime import date
 
+from app.clinical_sections import locks_or_default, prefill_or_default
+from app.core.config import settings
 from app.models.clinical import (
     Appointment,
     ClinicalNote,
@@ -9,6 +11,8 @@ from app.models.clinical import (
 )
 from app.models.user import User
 from app.services.access import full_name, memberships_for
+from app.services.note_crypto import reveal_content, reveal_text
+from app.services.sig import medication_sig
 
 
 def _age(dob: date) -> int:
@@ -23,12 +27,18 @@ def course_out(course: Course, instructor_ids: list[str]) -> dict:
         "title": course.title,
         "term": course.term,
         "status": course.status,
+        "inactivity_days": course.inactivity_days,
         "instructor_ids": instructor_ids,
         "rubric_file_name": course.rubric_file_name,
+        "grading_guide": course.grading_guide,
+        "guardrail_profile": course.guardrail_profile or "practicum",
+        "guardrail_mode": course.guardrail_mode,
+        "ai_assist": bool(course.ai_assist),
+        "ai_provider_configured": bool((settings.AI_API_URL or "").strip()),
     }
 
 
-def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
+def patient_out(patient: Patient, *, owner_name: str | None, viewer_role: str | None = None, viewer_station: str | None = None) -> dict:
     encounter = patient.encounter
     payload = {
         "id": str(patient.id),
@@ -50,6 +60,7 @@ def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
         "practice_label": patient.practice_label,
         "chief_complaint": patient.chief_complaint,
         "hpi": patient.hpi,
+        "past_medical_history": patient.past_medical_history,
         "status": {
             "lifecycle": patient.lifecycle,
             "encounter": patient.encounter_status,
@@ -57,7 +68,14 @@ def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
             "program": patient.program,
         },
         "allergies": [
-            {"substance": a.substance, "reaction": a.reaction, "severity": a.severity} for a in patient.allergies
+            {
+                "id": str(a.id),
+                "substance": a.substance,
+                "reaction": a.reaction,
+                "severity": a.severity,
+                "category": a.category,
+            }
+            for a in patient.allergies
         ],
         "medications": [
             {
@@ -66,12 +84,28 @@ def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
                 "dose": m.dose,
                 "route": m.route,
                 "frequency": m.frequency,
+                "sig": medication_sig(m.dose, m.route, m.frequency),
                 "indication": m.indication,
                 "adherence": m.adherence,
+                "access_cost": m.access_cost,
+                "status": m.status,
+                "prescribed": m.prescribed,
+                "is_compound": bool(m.is_compound),
+                "compound_ingredients": m.compound_ingredients,
+                "compound_vehicle": m.compound_vehicle,
+                "compound_reason": m.compound_reason,
+                "discontinued_at": m.discontinued_at,
+                "rxcui": m.rxcui,
+                "generic_name": m.generic_name,
+                "brand_names": list(m.brand_names or []),
+                "flags": list(m.flags or []),
             }
             for m in patient.medications
+            if m.status != "entered_in_error"
         ],
-        "problems": [{"code": p.code, "description": p.description, "since": p.since} for p in patient.problems],
+        "problems": [
+            {"id": str(p.id), "code": p.code, "description": p.description, "since": p.since} for p in patient.problems
+        ],
         "labs": [
             {
                 "id": str(lab.id),
@@ -84,7 +118,39 @@ def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
             }
             for lab in patient.labs
         ],
-        "vitals": [{"label": v.label, "value": v.value} for v in patient.vitals],
+        "vitals": [
+            {
+                "id": str(v.id),
+                "label": v.label,
+                "value": v.value,
+                "recorded_at": v.recorded_at,
+                "recorded_by_name": v.recorded_by_name,
+                "status": v.status or "recorded",
+            }
+            for v in patient.vitals
+            if viewer_role != "student" or (v.status or "recorded") != "entered_in_error"
+        ],
+        "lung_sounds": [
+            {
+                "id": str(row.id),
+                "location": row.location,
+                "finding": row.finding,
+                "notes": row.notes,
+                "recorded_at": row.recorded_at,
+                "recorded_by_name": row.recorded_by_name,
+                "status": row.status or "recorded",
+            }
+            for row in patient.lung_sounds
+            if viewer_role != "student" or (row.status or "recorded") != "entered_in_error"
+        ],
+        "section_locks": locks_or_default(patient.section_locks),
+        "prefill_sections": prefill_or_default(patient.prefill_sections),
+        "unit": patient.unit,
+        "room": patient.room,
+        "bed": patient.bed,
+        "has_photo": bool(patient.photo),
+        "simulation_phase": patient.simulation_phase,
+        "viewer_station": viewer_station,
         "family_history": patient.family_history,
         "surgical_history": patient.surgical_history,
         "social_history": patient.social_history,
@@ -99,18 +165,24 @@ def patient_out(patient: Patient, *, owner_name: str | None) -> dict:
             "payer": patient.insurance_payer,
             "member_id": patient.insurance_member_id,
             "group_number": patient.insurance_group_number,
+            "notes": patient.insurance_notes,
         },
         "emergency_contact": {
             "name": patient.emergency_contact_name,
             "phone": patient.emergency_contact_phone,
             "relationship": patient.emergency_contact_relationship,
         },
+        "code_status": patient.code_status,
+        "advance_directive_notes": patient.advance_directive_notes,
+        "hipaa_on_file": bool(patient.hipaa_on_file),
+        "hipaa_signed_at": patient.hipaa_signed_at,
+        "hipaa_note": patient.hipaa_note,
     }
     return payload
 
 
-def note_out(note: ClinicalNote) -> dict:
-    return {
+def note_out(note: ClinicalNote, *, include_scores: bool = False) -> dict:
+    payload = {
         "id": str(note.id),
         "patient_id": str(note.patient_id),
         "encounter_id": str(note.encounter_id),
@@ -119,10 +191,14 @@ def note_out(note: ClinicalNote) -> dict:
         "author_name": full_name(note.author),
         "author_discipline": note.discipline.code,
         "mode": note.mode,
+        "kind": note.kind or "visit",
         "status": note.status,
         "version": note.version,
-        "content": note.content or {},
+        "content": reveal_content(note),
+        "sensitivity": note.sensitivity or "standard",
         "diagnoses": note.diagnoses or [],
+        "cpt_codes": note.cpt_codes or [],
+        "body_locked": bool(note.body_locked),
         "routed_to_id": str(note.routed_to_id) if note.routed_to_id else None,
         "created_at": note.created_at,
         "updated_at": note.updated_at,
@@ -134,8 +210,9 @@ def note_out(note: ClinicalNote) -> dict:
                 "id": str(item.id),
                 "author_id": str(item.author_id),
                 "author_name": full_name(item.author),
-                "body": item.body,
+                "body": reveal_text(item.body, item.body_cipher),
                 "kind": item.kind,
+                "section_id": item.section_id,
                 "created_at": item.created_at,
             }
             for item in sorted(note.feedback, key=lambda item: item.created_at)
@@ -144,12 +221,24 @@ def note_out(note: ClinicalNote) -> dict:
             {
                 "id": str(item.id),
                 "author_name": full_name(item.author),
-                "body": item.body,
+                "body": reveal_text(item.body, item.body_cipher),
                 "created_at": item.created_at,
             }
             for item in sorted(note.addenda, key=lambda item: item.created_at)
         ],
     }
+    if include_scores:
+        payload["rubric_scores"] = note.rubric_scores
+    return payload
+
+
+def authored_case_out(patient: Patient) -> dict:
+    payload = patient_out(patient, owner_name=None)
+    payload["created_by_name"] = full_name(patient.created_by) if patient.created_by else None
+    payload["updated_at"] = patient.updated_at
+    payload["grading_guide"] = patient.grading_guide
+    payload["triggers"] = list(patient.planted_triggers or [])
+    return payload
 
 
 def appointment_out(row: Appointment) -> dict:
@@ -179,6 +268,8 @@ async def user_out(db, user: User) -> dict:
         for (role, discipline), course_ids in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1] or ""))
     ]
     await db.refresh(user, attribute_names=["roles"])
+    if any(item.code == "patient" for item in user.roles) and not any(item["role"] == "patient" for item in roles):
+        roles.append({"role": "patient", "discipline": None, "course_ids": []})
     if any(item.code == "admin" for item in user.roles) and not any(item["role"] == "admin" for item in roles):
         from sqlalchemy import select
 
@@ -194,5 +285,6 @@ async def user_out(db, user: User) -> dict:
         "phone_last4": user.phone_last4,
         "must_change_password": user.must_change_password,
         "is_active": user.is_active,
+        "archived_at": user.archived_at,
         "roles": roles,
     }

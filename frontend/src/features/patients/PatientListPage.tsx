@@ -3,26 +3,32 @@ import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
   LinearProgress, Paper, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography,
 } from "@mui/material";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import Check from "@mui/icons-material/Check";
+import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import { listPatients, resetPracticePatient, unassignCase, type PatientRow } from "../../api/patients";
-import { useSession } from "../auth/AuthContext";
+import { useSession } from "../auth/useSession";
 import { can } from "../../utils/permissions";
-import { formatDateTime } from "../../utils/format";
+import { formatDate, formatDateTime } from "../../utils/format";
 import { useAsync } from "../../utils/useAsync";
 import NoteStatusChip from "../../components/NoteStatusChip";
 import EmptyState from "../../components/EmptyState";
-import { usePageHeading } from "../../components/PageHeading";
+import { usePageHeading } from "../../components/usePageHeading";
 import AssignCaseDialog from "./components/AssignCaseDialog";
+import { CASELOAD_VIEWS, caseloadHref, caseloadViewMeta, matchesCaseload, parseCaseloadView } from "./caseload";
 import type { CaseMode } from "../../types";
+import { phaseChip } from "./simulation";
 
 export default function PatientListPage() {
   const navigate = useNavigate();
   const { activeRole, courseId } = useSession();
   const isStudent = activeRole === "student";
-  usePageHeading(isStudent ? "My Patients" : "Patients");
   const [params, setParams] = useSearchParams();
-  const mode: CaseMode = params.get("mode") === "practice" ? "practice" : "assessment";
+  const requested = params.get("mode");
+  const mode: CaseMode = requested === "practice" || requested === "simulation" ? requested : "assessment";
   const query = params.get("q") ?? "";
+  const view = isStudent ? parseCaseloadView(params.get("view")) : undefined;
+  const viewMeta = view ? caseloadViewMeta(view) : undefined;
+  usePageHeading(viewMeta?.label ?? (isStudent ? "My Patients" : "Patients"));
   const [resetTarget, setResetTarget] = useState<PatientRow>();
   const [unassignTarget, setUnassignTarget] = useState<PatientRow>();
   const [assignOpen, setAssignOpen] = useState(false);
@@ -31,18 +37,27 @@ export default function PatientListPage() {
   const rows = useAsync(() => listPatients(activeRole, courseId), [activeRole, courseId]);
   const canAssign = can(activeRole, "patient:create");
 
+  const clinical = useMemo(
+    () => (rows.data ?? []).filter((r) => r.patient.mode !== "case"),
+    [rows.data],
+  );
   const counts = useMemo(() => ({
-    assessment: rows.data?.filter((r) => r.patient.mode === "assessment").length ?? 0,
-    practice: rows.data?.filter((r) => r.patient.mode === "practice").length ?? 0,
-  }), [rows.data]);
+    assessment: clinical.filter((r) => r.patient.mode === "assessment").length,
+    practice: clinical.filter((r) => r.patient.mode === "practice").length,
+    simulation: clinical.filter((r) => r.patient.mode === "simulation").length,
+  }), [clinical]);
 
-  const visible = (rows.data ?? [])
-    .filter((r) => r.patient.mode === mode)
+  const visible = clinical
+    .filter((r) => (view ? matchesCaseload(r, view) : r.patient.mode === mode))
     .filter((r) => {
       const q = query.trim().toLowerCase();
       if (!q) return true;
       const p = r.patient;
-      return [p.firstName, p.lastName, p.mrn, r.ownerName ?? ""].some((v) => v.toLowerCase().includes(q));
+      const dob = (p.dob || "").slice(0, 10);
+      const [year, month, day] = dob.split("-");
+      const numericDob = year && month && day ? `${month}/${day}/${year}` : "";
+      return [p.firstName, p.lastName, p.mrn, r.ownerName ?? "", dob, numericDob, dob ? formatDate(dob) : ""]
+        .some((v) => v.toLowerCase().includes(q));
     });
 
   const doReset = async () => {
@@ -67,7 +82,9 @@ export default function PatientListPage() {
       await unassignCase(activeRole, unassignTarget.patient.id);
       setFlash({
         severity: "success",
-        text: `${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} was removed from ${unassignTarget.ownerName ?? "the student"}.`,
+        text: unassignTarget.patient.mode === "simulation"
+          ? `${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} was ended.`
+          : `${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} was removed from ${unassignTarget.ownerName ?? "the student"}.`,
       });
       setUnassignTarget(undefined);
       rows.reload();
@@ -83,26 +100,72 @@ export default function PatientListPage() {
         <Alert severity={flash.severity} onClose={() => setFlash(undefined)} sx={{ mb: 2 }}>{flash.text}</Alert>
       )}
       <Paper>
+        {view && viewMeta ? (
+          <Box sx={{ px: 2.5, pt: 2.5, pb: 1 }}>
+            <Typography sx={{ fontSize: 28, fontWeight: 500, color: "#202124", lineHeight: 1.2 }}>
+              Filter by category
+            </Typography>
+            <Typography sx={{ mt: 0.5, fontSize: 16, color: "#5F6368" }}>{viewMeta.description}</Typography>
+            <Box
+              role="navigation"
+              aria-label="Patient categories"
+              sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, mt: 2.5 }}
+            >
+              {CASELOAD_VIEWS.map((item) => {
+                const selected = item.id === view;
+                const count = clinical.filter((r) => matchesCaseload(r, item.id)).length;
+                return (
+                  <Chip
+                    key={item.id}
+                    component={RouterLink}
+                    to={caseloadHref(item.id, query)}
+                    clickable
+                    variant="outlined"
+                    icon={selected ? <Check /> : undefined}
+                    label={`${item.label} (${count})`}
+                    aria-current={selected ? "page" : undefined}
+                    sx={categoryChipSx(selected)}
+                  />
+                );
+              })}
+            </Box>
+            <Button
+              component={RouterLink}
+              to={query ? `/patients?q=${encodeURIComponent(query)}` : "/patients"}
+              sx={{
+                mt: 2.5, alignSelf: "flex-start", bgcolor: "#F1F3F4", color: "#3C4043",
+                borderRadius: "10px", px: 2.75, py: 1.25, minHeight: 48, fontSize: 15, fontWeight: 600,
+                "&:hover": { bgcolor: "#E8EAED" },
+              }}
+            >
+              All patients
+            </Button>
+          </Box>
+        ) : (
         <Tabs
           value={mode} onChange={(_, v) => setParams({ mode: v, ...(query ? { q: query } : {}) }, { replace: true })}
           sx={{ px: 1, borderBottom: 1, borderColor: "divider" }} aria-label="Case type"
         >
           <Tab value="assessment" label={`${isStudent ? "Assigned cases" : "Assessment cases"} (${counts.assessment})`} />
           <Tab value="practice" label={`Practice patients (${counts.practice})`} />
+          <Tab value="simulation" label={`Simulation (${counts.simulation})`} />
         </Tabs>
+        )}
 
+        {!view && (
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, px: 2, pt: 1.5, flexWrap: "wrap" }}>
           <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 220 }}>
             {mode === "assessment"
-              ? isStudent
-                ? "Cases your instructor assigned to you. Each one is your own copy: no one else's notes appear on it."
-                : "One private copy per student. Open a case to see that student's work, or remove it from them."
-              : "Shared patients for learning the system. Nothing here is graded, and instructors reset them between sessions."}
+              ? "Private copies. Each student's notes stay on their own chart."
+              : mode === "simulation"
+                ? "Shared chart. Amber until vitals are in, then green for the pharmacist or provider."
+                : "Shared patients for practice. Nothing here is graded."}
           </Typography>
           {canAssign && (
             <Button size="small" variant="contained" onClick={() => setAssignOpen(true)}>Assign case</Button>
           )}
         </Box>
+        )}
 
         {rows.loading && <LinearProgress sx={{ mt: 1 }} aria-label="Loading patients" />}
 
@@ -110,10 +173,10 @@ export default function PatientListPage() {
           {rows.loading ? null : visible.length === 0 ? (
             <Box sx={{ p: 2 }}>
               <EmptyState
-                title={query ? "No patients match that search" : mode === "assessment" ? "No cases assigned yet" : "No practice patients in this course"}
-                action={!query && mode === "assessment" && canAssign ? <Button variant="contained" onClick={() => setAssignOpen(true)}>Assign case</Button> : undefined}
+                title={query ? "No patients match that search" : viewMeta ? viewMeta.emptyTitle : mode === "assessment" ? "No cases assigned yet" : mode === "simulation" ? "No simulations yet" : "No practice patients in this course"}
+                action={!query && !view && mode === "assessment" && canAssign ? <Button variant="contained" onClick={() => setAssignOpen(true)}>Assign case</Button> : undefined}
               >
-                {query ? "Try a last name or the full MRN." : mode === "assessment" && isStudent ? "Your instructor will assign cases here. Try a practice patient in the meantime." : mode === "assessment" && canAssign ? "Pick students and a case to create their private copies." : undefined}
+                {query ? "Try a last name, a date of birth, or the full MRN." : viewMeta ? viewMeta.emptyBody : mode === "assessment" && isStudent ? "Your instructor will assign cases here. Try a practice patient in the meantime." : mode === "assessment" && canAssign ? "Pick students and a case to create their private copies." : mode === "practice" ? "Practice patients are shared copies for learning the screens. They are not graded." : mode === "simulation" ? "Start one from a case. Only the assigned nurse, pharmacist, and provider can open it." : undefined}
               </EmptyState>
             </Box>
           ) : (
@@ -141,15 +204,22 @@ export default function PatientListPage() {
                       onClick={open}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
                       tabIndex={0}
-                      sx={{ cursor: "pointer" }}
+                      sx={{
+                        cursor: "pointer",
+                        boxShadow: mode === "simulation" ? `inset 4px 0 0 ${phaseChip(p.simulationPhase).color}` : undefined,
+                        bgcolor: mode === "simulation" ? phaseChip(p.simulationPhase).bgcolor : undefined,
+                      }}
                       aria-label={`Open chart for ${p.lastName}, ${p.firstName}`}
                     >
                       <TableCell sx={{ maxWidth: { xs: 140, sm: "none" } }}>
                         <Typography variant="body2" sx={{ fontWeight: 700 }}>
                           {p.lastName}, {p.firstName}
-                          {p.practiceLabel && <Chip size="small" label={p.practiceLabel} variant="outlined" sx={{ ml: 1 }} />}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">MRN {p.mrn}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: { xs: 140, sm: 280 } }}>
+                          {p.practiceLabel ? `${p.practiceLabel} · ` : ""}
+                          {mode === "simulation" ? `${phaseChip(p.simulationPhase).label} · ` : ""}
+                          MRN {p.mrn}
+                        </Typography>
                         <Typography
                           variant="caption"
                           color="text.secondary"
@@ -165,7 +235,7 @@ export default function PatientListPage() {
                         {p.ageYears} y, {p.sexAtBirth}
                       </TableCell>
                       <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
-                        <Chip size="small" label={p.status.encounter} color={p.status.encounter === "Checked in" || p.status.encounter === "In progress" ? "info" : "default"} variant="outlined" />
+                        {p.status.encounter}
                       </TableCell>
                       <TableCell>
                         <NoteStatusChip status={r.latestNote?.status} />
@@ -186,7 +256,10 @@ export default function PatientListPage() {
                         {mode === "assessment" && canAssign && (
                           <Button size="small" color="inherit" onClick={() => setUnassignTarget(r)} sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}>Remove</Button>
                         )}
-                        <Button size="small" variant="contained" onClick={open}>
+                        {mode === "simulation" && canAssign && (
+                          <Button size="small" color="inherit" onClick={() => setUnassignTarget(r)} sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}>End</Button>
+                        )}
+                        <Button size="small" onClick={open}>
                           <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Open chart</Box>
                           <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>Open</Box>
                         </Button>
@@ -218,15 +291,23 @@ export default function PatientListPage() {
       </Dialog>
 
       <Dialog open={Boolean(unassignTarget)} onClose={() => setUnassignTarget(undefined)}>
-        <DialogTitle>Remove this case from {unassignTarget?.ownerName ?? "the student"}?</DialogTitle>
+        <DialogTitle>
+          {unassignTarget?.patient.mode === "simulation"
+            ? "End this simulation?"
+            : `Remove this case from ${unassignTarget?.ownerName ?? "the student"}?`}
+        </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {unassignTarget?.patient.lastName}, {unassignTarget?.patient.firstName} will disappear from their patient list. Their notes on this copy are no longer reachable. Other students' copies are unchanged.
+            {unassignTarget?.patient.mode === "simulation"
+              ? `${unassignTarget.patient.lastName}, ${unassignTarget.patient.firstName} leaves the Simulation tab for everyone assigned to it. Graded charts are not affected.`
+              : `${unassignTarget?.patient.lastName}, ${unassignTarget?.patient.firstName} will disappear from their patient list. Their notes on this copy are no longer reachable. Other students' copies are unchanged.`}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setUnassignTarget(undefined)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={doUnassign}>Remove assignment</Button>
+          <Button variant="contained" color="error" onClick={doUnassign}>
+            {unassignTarget?.patient.mode === "simulation" ? "End simulation" : "Remove assignment"}
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -248,6 +329,27 @@ export default function PatientListPage() {
       )}
     </Box>
   );
+}
+
+const CATEGORY_BLUE = "#1A73E8";
+
+function categoryChipSx(selected: boolean) {
+  return {
+    height: 42,
+    borderRadius: "999px",
+    px: 0.25,
+    fontSize: 15,
+    fontWeight: 600,
+    textDecoration: "none",
+    bgcolor: "#fff",
+    color: selected ? CATEGORY_BLUE : "#3C4043",
+    borderColor: selected ? CATEGORY_BLUE : "#DADCE0",
+    "& .MuiChip-icon": { color: CATEGORY_BLUE, fontSize: 20, ml: "12px" },
+    "& .MuiChip-label": { px: 1.75 },
+    "&:hover, &.MuiChip-clickable:hover": {
+      bgcolor: selected ? "rgba(26,115,232,0.06)" : "#F8F9FA",
+    },
+  } as const;
 }
 
 const visuallyHidden = {

@@ -32,16 +32,18 @@ Electronic Medical Record (EMR) system built as our practicum project.
 - Students and instructors can use patient charts, write notes, create referrals, and review notes.
 - Courses move from `planned` to `active`, from `active` to `ended`, and from `ended` to `archived`. Ended courses can return to `active`. Archived courses cannot reopen. Ended and archived courses reject changes to patients, notes, referrals and roster imports. Roster removal stays available so access can be removed after a course ends. Archived courses are hidden from non-admin course lists.
 - The same course code can be used for different terms. Each code and term pair must be unique.
-- The roster page has an Add people card with a single-person form and spreadsheet upload. Imports add students. Admins can also add instructors. Instructors can remove other instructors. They cannot remove themselves or the last instructor.
+- The roster page has an Add people card with a single-person form and spreadsheet upload. Admins import students and course coordinators. Course coordinators add instructors. A course keeps at least one instructor, and nobody can remove their own instructor seat.
 - Admins can create courses, manage course status and roster access, deactivate and reactivate accounts, review audit activity, and view course reports with CSV export.
 
 ## Roles
 
 | Role | Capabilities |
 | --- | --- |
-| Student | Advance encounters, write and sign notes, and create referrals. |
-| Instructor | Create patients, update patient status, reset practice charts, advance encounters, co-sign or return notes, create referrals, import student rosters, remove instructors, and view audit activity. Instructors must be rostered in a course to use course-scoped actions. They cannot remove themselves or the last instructor. |
-| Admin | Create patients, update patient status, reset practice charts, import and remove course roster members, remove instructors, create courses, manage course status, add instructor access, manage user access, run reports, and view audit activity. Admins need instructor membership to use the Instructor role in a course. |
+| Student | Advance encounters, write and sign notes, update unlocked chart sections, and create referrals. |
+| Instructor | Create patients and cases, update patient status, reset practice charts, co-sign or return notes, grade with an uploaded rubric, export grades and chart time, and view audit activity. Instructors do not create or import student accounts. |
+| Course coordinator | Instructor permissions, plus adding and removing instructors on their own courses. |
+| Admin | Student accounts (create, enroll, reset access, archive, purge), course status, coordinator access, teaching exports, and audit activity. Creating patients and cases stays with instructors. Admins need an instructor membership to author cases. |
+| Patient | View-only portal: labs, last signed visit, prescribed medications, and the active medication list. |
 
 ## API additions
 
@@ -125,7 +127,9 @@ The migration command applies all database migrations. The seed command creates 
 
 - Student: `daniel.reyes@miners.utep.edu`
 - Instructor: `joe.mota@utep.edu`
-- Administrator (also an instructor in seeded courses): `gerardo.sillas@utep.edu`
+- Administrator: `clarissa.dominguez@utep.edu`
+- Administrator who also teaches: `gerardo.sillas@utep.edu`
+- Patient demo: `patient.demo@example.com`
 
 Use the configured seed demo password for each account.
 
@@ -208,7 +212,8 @@ GitHub Actions runs backend `pytest -q` with PostgreSQL. It runs `npm ci` and `n
 
 - Courses cannot be deleted. Archive a course instead. Archived courses cannot reopen.
 - Admin permissions do not grant instructor membership. To use Instructor mode for a course, an admin must also be rostered there as an instructor.
-- The roster form and spreadsheet upload require a 9-digit 800 number. The API does not independently validate the format.
+- The roster form, spreadsheet upload, and student account API require a 9-digit 800 number.
+- Simulation charts are a separate shared handoff. Assessment copies stay private to the student they were assigned to. Encounter statuses are Scheduled, Checked in, Roomed, In progress, Checked out, and Closed.
 
 ## Deploy
 

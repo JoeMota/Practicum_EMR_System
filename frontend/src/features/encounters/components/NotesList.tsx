@@ -5,7 +5,7 @@ import NoteStatusChip from "../../../components/NoteStatusChip";
 import EmptyState from "../../../components/EmptyState";
 import { formatDateTime } from "../../../utils/format";
 import { disciplineLabel } from "../../../utils/labels";
-import { TEMPLATES } from "../noteTemplates";
+import { templateName } from "../noteTemplates";
 
 interface Props {
   notes: ClinicalNote[];
@@ -48,10 +48,10 @@ export default function NotesList({ notes, patientId, reviewer, emptyAction }: P
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
                 tabIndex={0}
                 sx={{ cursor: "pointer" }}
-                aria-label={`${label} ${TEMPLATES[n.templateId].name}`}
+                aria-label={`${label} ${templateName(n.templateId)}`}
               >
                 <TableCell>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{TEMPLATES[n.templateId].name}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{templateName(n.templateId)}</Typography>
                   <Typography variant="caption" color="text.secondary">{n.diagnoses.map((d) => d.code).join(", ") || "No diagnosis yet"}</Typography>
                 </TableCell>
                 <TableCell>

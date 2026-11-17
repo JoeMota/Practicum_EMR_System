@@ -1,8 +1,14 @@
+import { useEffect, useState } from "react";
 import { Box, Button, Chip, Paper, Typography } from "@mui/material";
 import WarningAmberRounded from "@mui/icons-material/WarningAmberRounded";
 import type { Patient } from "../../../types";
+import { getPatientPhoto } from "../../../api/patients";
+import { listOpened } from "../../../api/chart";
+import { useAsync } from "../../../utils/useAsync";
 import { formatDate } from "../../../utils/format";
 import { utep } from "../../../theme/tokens";
+import { useSession } from "../../auth/useSession";
+import { phaseChip } from "../simulation";
 
 interface Props {
   patient: Patient;
@@ -11,15 +17,53 @@ interface Props {
   compact?: boolean;
 }
 
-const card = { borderRadius: "16px", overflow: "hidden" } as const;
+const card = { borderRadius: 1, overflow: "hidden", border: "none", boxShadow: `inset 0 0 0 1px ${utep.lineSoft}` } as const;
 
 export default function PatientBanner({ patient: p, ownerName, onEditStatus, compact }: Props) {
+  const { activeRole } = useSession();
+  const opened = useAsync(
+    () => (p.mode === "simulation" ? listOpened(activeRole, p.id) : Promise.resolve([])),
+    [activeRole, p.id, p.mode],
+  );
   const initials = `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`;
+  const [photo, setPhoto] = useState<{ id: string; src: string }>();
+  useEffect(() => {
+    if (!p.hasPhoto) return;
+    let live = true;
+    getPatientPhoto(activeRole, p.id)
+      .then((row) => { if (live) setPhoto({ id: p.id, src: `data:${row.contentType};base64,${row.data}` }); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [activeRole, p.hasPhoto, p.id]);
+  const shownPhoto = p.hasPhoto && photo?.id === p.id ? photo.src : undefined;
+  const phase = phaseChip(p.simulationPhase);
+  const openedLine = (opened.data ?? []).length
+    ? `Opened by ${opened.data!.map((person) => person.station ? `${person.name} (${person.station})` : person.name).join(", ")}`
+    : "";
+  const statusLabel = p.mode === "case"
+    ? "Case master"
+    : p.mode === "assessment"
+      ? (ownerName ? `Assessment · ${ownerName}` : "Assessment · your copy")
+      : p.mode === "simulation"
+        ? phase.label
+        : `${p.practiceLabel ?? "Practice"} · not graded`;
+  const statusChip = p.mode === "simulation"
+    ? { bgcolor: phase.bgcolor, color: phase.color }
+    : p.mode === "practice"
+      ? { bgcolor: "transparent", color: utep.navy, border: `1px solid ${utep.line}` }
+      : { bgcolor: utep.navy, color: "#fff" };
+  const emergency = [p.emergencyContact?.name, p.emergencyContact?.relationship && `(${p.emergencyContact.relationship})`]
+    .filter(Boolean)
+    .join(" ");
+  const emergencyLine = [emergency, p.emergencyContact?.phone].filter(Boolean).join(" · ");
+  const codeAlert = p.codeStatus === "DNR" || p.codeStatus === "DNI";
   const statusItems: [string, string][] = [
     ["Visit", p.status.encounter],
     ["Setting", p.status.careSetting],
     ["Record", p.status.lifecycle],
     ...(p.status.program ? ([["Program", p.status.program]] as [string, string][]) : []),
+    ...(p.codeStatus ? ([["Code status", p.codeStatus]] as [string, string][]) : []),
+    ...(emergencyLine ? ([["Emergency", emergencyLine]] as [string, string][]) : []),
   ];
 
   return (
@@ -34,14 +78,16 @@ export default function PatientBanner({ patient: p, ownerName, onEditStatus, com
         }}
       >
         <Box
-          aria-hidden
+          aria-hidden={shownPhoto ? undefined : true}
           sx={{
             width: compact ? 44 : 52, height: compact ? 44 : 52, borderRadius: "50%",
             bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center",
-            fontWeight: 800, fontSize: compact ? 16 : 18,
+            fontWeight: 800, fontSize: compact ? 16 : 18, overflow: "hidden",
           }}
         >
-          {initials}
+          {shownPhoto ? (
+            <Box component="img" src={shownPhoto} alt={`${p.firstName} ${p.lastName}`} sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : initials}
         </Box>
 
         <Box sx={{ minWidth: 0 }}>
@@ -59,13 +105,27 @@ export default function PatientBanner({ patient: p, ownerName, onEditStatus, com
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {p.ageYears} y, {p.sexAtBirth}{p.pronouns ? ` (${p.pronouns})` : ""}, DOB {formatDate(p.dob)}, MRN {p.mrn}
           </Typography>
-          <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-            {p.mode === "assessment" ? (
-              <Chip size="small" label={ownerName ? `Assessment case: ${ownerName}` : "Assessment case: only your work appears here"} sx={{ bgcolor: utep.navy, color: "#fff" }} />
-            ) : (
-              <Chip size="small" label={`${p.practiceLabel ?? "Practice patient"}: shared, not graded`} variant="outlined" />
+          <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
+            <Chip size="small" label={statusLabel} sx={statusChip} />
+            {p.codeStatus && (
+              <Chip
+                size="small"
+                label={p.codeStatus}
+                sx={codeAlert
+                  ? { bgcolor: utep.alertSoft, color: utep.alert, fontWeight: 700 }
+                  : { bgcolor: "action.hover", color: utep.ink2 }}
+              />
             )}
-            <Chip size="small" label="Simulated patient" sx={{ bgcolor: utep.orangeSoft, color: utep.navy }} />
+            {p.hipaaOnFile && (
+              <Chip size="small" label="HIPAA on file" sx={{ bgcolor: "action.hover", color: utep.ink2 }} />
+            )}
+            <Typography variant="caption" color="text.secondary">
+              {[
+                p.mode === "simulation" && p.viewerStation ? `You are the ${p.viewerStation}` : "",
+                openedLine,
+                "Simulated patient",
+              ].filter(Boolean).join(" · ")}
+            </Typography>
           </Box>
         </Box>
 

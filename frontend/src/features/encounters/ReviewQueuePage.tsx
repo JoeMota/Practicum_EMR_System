@@ -4,14 +4,13 @@ import {
 } from "@mui/material";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { listReviewQueue } from "../../api/notes";
-import { getCourse } from "../../api/courses";
-import { useSession } from "../auth/AuthContext";
+import { useSession } from "../auth/useSession";
 import { formatDateTime } from "../../utils/format";
 import { useAsync } from "../../utils/useAsync";
 import NoteStatusChip from "../../components/NoteStatusChip";
 import EmptyState from "../../components/EmptyState";
 import PageError from "../../components/PageError";
-import { usePageHeading } from "../../components/PageHeading";
+import { usePageHeading } from "../../components/usePageHeading";
 import { templateName } from "./noteTemplates";
 import type { NoteStatus } from "../../types";
 
@@ -35,17 +34,20 @@ export default function ReviewQueuePage() {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const { activeRole, courseId } = useSession();
+  const incoming = (location.state as { flash?: string } | null)?.flash ?? "";
   const [flash, setFlash] = useState("");
+  const [seenFlash, setSeenFlash] = useState("");
+  if (incoming && incoming !== seenFlash) {
+    setSeenFlash(incoming);
+    setFlash(incoming);
+  }
   const filter = tabFromSearch(params.get("status"));
   const queue = useAsync(() => listReviewQueue(courseId, activeRole), [courseId, activeRole]);
-  const course = useAsync(() => getCourse(courseId), [courseId]);
 
   useEffect(() => {
-    const msg = (location.state as { flash?: string } | null)?.flash;
-    if (!msg) return;
-    setFlash(msg);
+    if (!incoming) return;
     navigate(".", { replace: true, state: null });
-  }, [location.state, navigate]);
+  }, [incoming, navigate]);
 
   const rows = (queue.data ?? []).filter((q) => QUEUE_STATUSES.has(q.note.status));
   const items = rows.filter((q) => filter === "all" || q.note.status === filter);
@@ -54,27 +56,14 @@ export default function ReviewQueuePage() {
 
   if (queue.error) return <PageError error={queue.error} />;
 
-  const pendingCount = count("pending_review");
-
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>Review queue</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        {course.data ? `${course.data.code}: ` : ""}assessment notes students routed to you for co-signature
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: "72ch" }}>
-        Open a note to read it beside the chart. Co-sign accepts the documentation; return sends it back with feedback the student must fix.
-        Record scores in the course gradebook — grades are not stored here.
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Assessment notes routed to you. Scores you save stay on the note. Students do not see them.
       </Typography>
 
       {flash && (
         <Alert severity="success" onClose={() => setFlash("")} sx={{ mb: 2 }}>{flash}</Alert>
-      )}
-
-      {pendingCount > 0 && filter === "pending_review" && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {pendingCount === 1 ? "1 note needs your review." : `${pendingCount} notes need your review.`}
-        </Alert>
       )}
 
       <Paper>

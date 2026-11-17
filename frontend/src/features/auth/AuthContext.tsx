@@ -1,28 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Discipline, Role, RoleAssignment, User } from "../../types";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { courseIdsForRole } from "../../utils/permissions";
+import { logout, setActingRole } from "../../api/auth";
 import {
   readSession, refreshAccessToken, SESSION_EVENT, setSignedOutNotice, tokenExpiresAt, writeSession,
   type StoredSession,
 } from "../../api/client";
+import { AuthContext, type AuthCtx } from "./useSession";
+import type { Role } from "../../types";
 
 const IDLE_MS = 15 * 60 * 1000;
-
-interface AuthCtx {
-  session: StoredSession | null;
-  user: User | null;
-  activeRole: Role | null;
-  assignment: RoleAssignment | null;
-  discipline: Discipline | undefined;
-  courseId: string | undefined;
-  signIn: (user: User, accessToken: string, mustChangePassword: boolean) => void;
-  signOut: () => void;
-  clearPasswordChange: () => void;
-  switchRole: (role: Role) => void;
-  selectCourse: (courseId: string) => void;
-}
-
-const AuthContext = createContext<AuthCtx | null>(null);
 
 function load(): StoredSession | null {
   const session = readSession();
@@ -96,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       assignment,
       discipline: assignment?.discipline,
       courseId: session?.courseId,
-      signIn: (user, accessToken, mustChangePassword) => {
+      signIn: (user, accessToken, mustChangePassword, refreshToken) => {
         const first = user.roles[0];
         const onlyCourse = user.roles.length === 1 && first?.courseIds.length === 1 ? first.courseIds[0] : undefined;
         persist({
@@ -104,19 +90,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           activeRole: first?.role ?? "student",
           courseId: onlyCourse,
           accessToken,
+          refreshToken,
           mustChangePassword,
         });
       },
-      signOut: () => persist(null),
+      signOut: () => {
+        const refreshToken = sessionRef.current?.refreshToken;
+        if (refreshToken) void logout(refreshToken).catch(() => undefined);
+        persist(null);
+      },
       clearPasswordChange: () => {
         if (!sessionRef.current) return;
         persist({ ...sessionRef.current, mustChangePassword: false });
       },
-      switchRole: (role) => {
+      switchRole: (role: Role) => {
         const current = sessionRef.current;
         if (!current) return;
         const keepCourse = current.courseId && courseIdsForRole(current.user, role).includes(current.courseId);
-        persist({ ...current, activeRole: role, courseId: keepCourse ? current.courseId : undefined });
+        const nextCourse = keepCourse ? current.courseId : undefined;
+        persist({ ...current, activeRole: role, courseId: nextCourse });
+        void setActingRole(role)
+          .then((result) => {
+            const live = sessionRef.current;
+            if (!live) return;
+            persist({
+              ...live,
+              user: result.user,
+              activeRole: role,
+              courseId: live.courseId && courseIdsForRole(result.user, role).includes(live.courseId)
+                ? live.courseId
+                : nextCourse,
+              accessToken: result.accessToken,
+              refreshToken: result.refreshToken ?? live.refreshToken,
+              mustChangePassword: result.mustChangePassword,
+            });
+          })
+          .catch(() => undefined);
       },
       selectCourse: (courseId) => {
         const current = sessionRef.current;
@@ -126,21 +135,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, persist]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
-}
-
-export function useSession() {
-  const ctx = useAuth();
-  if (!ctx.user || !ctx.activeRole) throw new Error("No active session");
-  return {
-    ...ctx,
-    user: ctx.user,
-    activeRole: ctx.activeRole,
-    courseId: ctx.courseId ?? "",
-  };
 }

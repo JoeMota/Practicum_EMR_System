@@ -11,6 +11,7 @@ export const disciplineLabel: Record<Discipline, string> = {
 export const roleLabel: Record<Role, string> = {
   student: "Student",
   instructor: "Instructor",
+  course_coordinator: "Course coordinator",
   admin: "Administrator",
   front_desk: "Front desk",
   patient: "Patient",

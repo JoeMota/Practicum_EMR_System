@@ -1,18 +1,8 @@
 import { Box, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import type { Medication } from "../../../types";
-
-export type MedRecAction = "Continue" | "Modify" | "Discontinue" | "Hold";
-export type MedRecValue = Record<string, { action?: MedRecAction; comment?: string }>;
+import { type MedRecAction, type MedRecValue } from "./medRec";
 
 const ACTIONS: MedRecAction[] = ["Continue", "Modify", "Discontinue", "Hold"];
-
-export function parseMedRec(raw?: string): MedRecValue {
-  try {
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
 
 interface Props {
   medications: Medication[];

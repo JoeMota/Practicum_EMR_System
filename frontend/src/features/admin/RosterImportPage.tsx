@@ -5,32 +5,43 @@ import {
 } from "@mui/material";
 import UploadFileOutlined from "@mui/icons-material/UploadFileOutlined";
 import type { Discipline, RosterRow, User } from "../../types";
-import { importRoster, listRoster, removeFromCourse, type TempPassword } from "../../api/roster";
+import { importRoster, listRoster, removeFromCourse, setRosterActive, type TempPassword } from "../../api/roster";
 import { getCourse, listInstructors } from "../../api/courses";
-import { setUserActive } from "../../api/users";
-import { useSession } from "../auth/AuthContext";
-import { disciplineLabel } from "../../utils/labels";
+import { archiveUser, deleteAccount, purgeExpiredAccounts, resetPassword, setUserActive } from "../../api/users";
+import EditAccountDialog from "./EditAccountDialog";
+import { useSession } from "../auth/useSession";
+import { can } from "../../utils/permissions";
+import { disciplineLabel, roleLabel } from "../../utils/labels";
 import { useAsync } from "../../utils/useAsync";
 import EmptyState from "../../components/EmptyState";
-import { usePageHeading } from "../../components/PageHeading";
+import { usePageHeading } from "../../components/usePageHeading";
 import { parseRosterFile, ROSTER_TEMPLATE_CSV } from "./parseRoster";
 import AddPersonForm from "./AddPersonForm";
+import EnrollAccount from "./EnrollAccount";
 
-export default function RosterImportPage() {
-  usePageHeading("Roster");
-  const { user, activeRole, courseId } = useSession();
+export default function RosterImportPage({ courseId: courseIdProp }: { courseId?: string }) {
+  usePageHeading(courseIdProp ? "People" : "Roster");
+  const { user, activeRole, courseId: sessionCourseId } = useSession();
+  const courseId = courseIdProp ?? sessionCourseId;
   const fileInput = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<RosterRow[]>();
   const [fileName, setFileName] = useState("");
   const [discipline, setDiscipline] = useState<Discipline>("pharmacy");
-  const [importRole, setImportRole] = useState<"student" | "instructor">("student");
+  const manageStudents = can(activeRole, "roster:import");
+  const [importRole, setImportRole] = useState<"student" | "instructor" | "course_coordinator">(manageStudents ? "student" : "instructor");
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string }>();
   const [passwords, setPasswords] = useState<TempPassword[]>([]);
-  const [removing, setRemoving] = useState<{ person: User; role: "student" | "instructor" }>();
+  const [removing, setRemoving] = useState<{ person: User; role: "student" | "instructor" | "course_coordinator" }>();
+  const [editing, setEditing] = useState<User>();
+  const [deleting, setDeleting] = useState<User>();
+  const [confirmEmail, setConfirmEmail] = useState("");
 
-  const course = useAsync(() => getCourse(courseId), [courseId]);
-  const roster = useAsync(() => listRoster(courseId), [courseId]);
-  const instructors = useAsync(() => listInstructors(courseId), [courseId]);
+  const course = useAsync(() => (courseId ? getCourse(courseId) : Promise.resolve(undefined)), [courseId]);
+  const roster = useAsync(
+    () => (manageStudents && courseId ? listRoster(courseId) : Promise.resolve([])),
+    [courseId, manageStudents],
+  );
+  const instructors = useAsync(() => (courseId ? listInstructors(courseId) : Promise.resolve([])), [courseId]);
 
   const problems = rows?.filter((r) => r.problem).length ?? 0;
   const templateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(ROSTER_TEMPLATE_CSV)}`;
@@ -40,20 +51,40 @@ export default function RosterImportPage() {
     setMessage(undefined);
     try {
       const parsed = await parseRosterFile(file);
-      setRows(parsed);
+      const ready = importRole === "student"
+        ? parsed
+        : parsed.map((row) => ({ ...row, problem: row.problem === "ID must be a 9-digit 800 number" ? undefined : row.problem }));
+      setRows(ready);
       setFileName(file.name);
-      if (parsed.length === 0) setMessage({ kind: "error", text: "No student rows found. The first sheet needs Name, Email, and 800 Number columns." });
+      if (ready.length === 0) setMessage({ kind: "error", text: "No rows found. The first sheet needs a name and a UTEP email." });
     } catch {
       setMessage({ kind: "error", text: "That file couldn't be read. Upload an .xlsx, .xls, or .csv file." });
     }
   };
 
+  const issuePassword = async (person: User) => {
+    try {
+      const issued = await resetPassword(person.id);
+      setPasswords([issued]);
+      setMessage({ kind: "success", text: `A temporary password was issued for ${person.fullName}.` });
+    } catch (e) {
+      setMessage({ kind: "error", text: (e as Error).message });
+    }
+  };
+
   const doImport = async (list = rows): Promise<boolean> => {
-    if (!list) return false;
+    if (!list || !courseId) return false;
     try {
       const res = await importRoster(courseId, discipline, list, importRole);
       setPasswords(res.temporaryPasswords);
-      setMessage({ kind: "success", text: `Added ${res.added} ${importRole}s to ${course.data?.code}.${res.alreadyEnrolled ? ` ${res.alreadyEnrolled} were already enrolled.` : ""}` });
+      const extras = [
+        res.reactivated ? `${res.reactivated} reactivated` : "",
+        res.alreadyEnrolled ? `${res.alreadyEnrolled} already enrolled` : "",
+      ].filter(Boolean);
+      setMessage({
+        kind: "success",
+        text: `Added ${res.added} ${importRole}s to ${course.data?.code}${extras.length ? `. ${extras.join(". ")}.` : "."}`,
+      });
       if (list === rows) {
         setRows(undefined);
         setFileName("");
@@ -67,17 +98,20 @@ export default function RosterImportPage() {
     }
   };
 
+  if (!courseId) return null;
+
   return (
     <Stack spacing={2.5}>
-      <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>Course roster</Typography>
-        <Typography variant="body2" color="text.secondary">{course.data ? `${course.data.code}: ${course.data.title}, ${course.data.term}` : " "}</Typography>
-      </Box>
+      {!courseIdProp && (
+        <Typography variant="body2" color="text.secondary">
+          {course.data ? `${course.data.code}: ${course.data.title}, ${course.data.term}` : "Enroll people in this class."}
+        </Typography>
+      )}
 
       {message && <Alert severity={message.kind} onClose={() => setMessage(undefined)}>{message.text}</Alert>}
       {passwords.length > 0 && (
         <Alert severity="warning">
-          Share these temporary passwords with the new students. They have to change them at sign-in, and this is the only time they show up.
+          Share these temporary passwords. They have to change them at sign-in, and this is the only time they show up.
           <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
             {passwords.map((item) => (
               <li key={item.email}><strong>{item.email}</strong>: {item.password}</li>
@@ -89,10 +123,11 @@ export default function RosterImportPage() {
       <Paper sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">Add people</Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { sm: "center" }, mt: 2 }}>
-          {activeRole === "admin" && (
-            <TextField select size="small" label="Add as" value={importRole} onChange={(e) => setImportRole(e.target.value as "student" | "instructor")} sx={{ minWidth: 160 }}>
+          {manageStudents && (
+            <TextField select size="small" label="Add as" value={importRole} onChange={(e) => setImportRole(e.target.value as "student" | "instructor" | "course_coordinator")} sx={{ minWidth: 200 }}>
               <MenuItem value="student">Student</MenuItem>
               <MenuItem value="instructor">Instructor</MenuItem>
+              <MenuItem value="course_coordinator">Course coordinator</MenuItem>
             </TextField>
           )}
           <TextField select size="small" label="Discipline" value={discipline} onChange={(e) => setDiscipline(e.target.value as Discipline)} sx={{ minWidth: 240 }}>
@@ -101,10 +136,24 @@ export default function RosterImportPage() {
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mt: 2.5 }}>
+          {activeRole === "admin" && courseId && (
+            <EnrollAccount
+              courseId={courseId}
+              role={importRole}
+              discipline={discipline}
+              onEnrolled={() => {
+                roster.reload();
+                instructors.reload();
+                setMessage({ kind: "success", text: `Enrolled in ${course.data?.code ?? "this class"}.` });
+              }}
+            />
+          )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 600 }}>Add one person</Typography>
+            <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 600 }}>
+              {activeRole === "admin" ? "Or create an account" : "Add one person"}
+            </Typography>
             <AddPersonForm
-              role={activeRole === "admin" ? importRole : "student"}
+              role={importRole}
               discipline={discipline}
               onSubmit={(row) => doImport([row])}
             />
@@ -113,7 +162,7 @@ export default function RosterImportPage() {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Or upload a spreadsheet</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Upload Excel or CSV with name, UTEP email, and 800 number; existing accounts are added. <Link href={templateHref} download="roster-template.csv">Download a template</Link>.
+              Upload Excel or CSV. Students need a name, UTEP email, and 800 number. Instructors need a name and UTEP email. Existing accounts are enrolled. <Link href={templateHref} download="roster-template.csv">Download a template</Link>.
             </Typography>
           <input ref={fileInput} type="file" hidden accept=".xlsx,.xls,.csv" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
           <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => fileInput.current?.click()}>
@@ -157,11 +206,10 @@ export default function RosterImportPage() {
           </Box>
       )}
 
-      <Paper sx={{ p: 2.5 }}>
+      {manageStudents && <Paper sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">Enrolled students ({roster.data?.length ?? 0})</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Remove a student if they leave the course. Their account and signed notes stay; they just lose access to this class.
-          Deactivate / reactivate without removing is planned next — for now, re-import restores access.
+          Deactivate keeps the student on the roster and keeps their charts and notes. They lose access until you reactivate them. Remove deletes the enrollment.
         </Typography>
         {(roster.data ?? []).length === 0 ? (
           <EmptyState title="No students yet">Upload a roster to add your class.</EmptyState>
@@ -169,27 +217,55 @@ export default function RosterImportPage() {
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
               <TableHead>
-                <TableRow><TableCell>Name</TableCell><TableCell>Email</TableCell><TableCell>800 number</TableCell><TableCell>Discipline</TableCell><TableCell /></TableRow>
+                <TableRow><TableCell>Name</TableCell><TableCell>Email</TableCell><TableCell>800 number</TableCell><TableCell>Discipline</TableCell><TableCell>Access</TableCell><TableCell /></TableRow>
               </TableHead>
               <TableBody>
                 {roster.data?.map((u) => {
                   const d = u.roles.find((r) => r.role === "student" && r.courseIds.includes(courseId))?.discipline;
+                  const inactive = u.rosterStatus === "inactive";
                   return (
                     <TableRow key={u.id}>
                       <TableCell sx={{ fontWeight: 600 }}>{u.fullName}</TableCell>
                       <TableCell>{u.email}</TableCell>
                       <TableCell>{u.universityId ?? "—"}</TableCell>
                       <TableCell>{d ? disciplineLabel[d] : "—"}</TableCell>
+                      <TableCell><Chip size="small" label={inactive ? "Inactive" : "Active"} color={inactive ? "default" : "success"} /></TableCell>
                       <TableCell align="right">
+                        <Button size="small" color="warning" onClick={async () => {
+                          try {
+                            const updated = await setRosterActive(courseId, u.id, inactive);
+                            roster.setData((current) => current?.map((item) => item.id === u.id ? updated : item));
+                          } catch (e) {
+                            setMessage({ kind: "error", text: (e as Error).message });
+                          }
+                        }}>{inactive ? "Reactivate" : "Deactivate"}</Button>
+                        {manageStudents && (
+                          <Button size="small" onClick={async () => {
+                            try {
+                              await archiveUser(u.id);
+                              roster.reload();
+                              setMessage({ kind: "success", text: `${u.fullName} was archived. The account is kept for two years, then an administrator can purge it.` });
+                            } catch (e) {
+                              setMessage({ kind: "error", text: (e as Error).message });
+                            }
+                          }}>Archive</Button>
+                        )}
                         {activeRole === "admin" && (
-                          <Button size="small" color="warning" disabled={u.id === user.id && u.isActive} onClick={async () => {
+                          <Button size="small" disabled={u.id === user.id && u.isActive} onClick={async () => {
                             try {
                               await setUserActive(u.id, !u.isActive);
                               roster.setData((current) => current?.map((item) => item.id === u.id ? { ...item, isActive: !u.isActive } : item));
                             } catch (e) {
                               setMessage({ kind: "error", text: (e as Error).message });
                             }
-                          }}>{u.isActive ? "Deactivate" : "Reactivate"}</Button>
+                          }}>{u.isActive ? "Deactivate account" : "Reactivate account"}</Button>
+                        )}
+                        {activeRole === "admin" && <Button size="small" onClick={() => setEditing(u)}>Edit</Button>}
+                        {activeRole === "admin" && (
+                          <Button size="small" disabled={u.id === user.id} onClick={() => issuePassword(u)}>Reset password</Button>
+                        )}
+                        {activeRole === "admin" && (
+                          <Button size="small" color="error" disabled={u.id === user.id} onClick={() => { setConfirmEmail(""); setDeleting(u); }}>Delete account</Button>
                         )}
                         <Button size="small" color="error" onClick={() => setRemoving({ person: u, role: "student" })}>Remove</Button>
                       </TableCell>
@@ -200,7 +276,18 @@ export default function RosterImportPage() {
             </Table>
           </Box>
         )}
-      </Paper>
+      </Paper>}
+
+      {manageStudents && (
+        <Button variant="outlined" onClick={async () => {
+          try {
+            const result = await purgeExpiredAccounts();
+            setMessage({ kind: "success", text: `${result.purged} archived account${result.purged === 1 ? "" : "s"} passed the two-year mark and ${result.purged === 1 ? "was" : "were"} purged.` });
+          } catch (e) {
+            setMessage({ kind: "error", text: (e as Error).message });
+          }
+        }}>Purge accounts archived more than two years</Button>
+      )}
 
       <Paper sx={{ p: 2.5 }}>
         <Typography component="h2" variant="h6">Instructors ({instructors.data?.length ?? 0})</Typography>
@@ -210,12 +297,22 @@ export default function RosterImportPage() {
         ) : (
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
-              <TableHead><TableRow><TableCell>Name</TableCell><TableCell>Email</TableCell><TableCell>Account</TableCell><TableCell /></TableRow></TableHead>
+              <TableHead><TableRow><TableCell>Name</TableCell><TableCell>Email</TableCell><TableCell>Role in this class</TableCell><TableCell>Account</TableCell><TableCell /></TableRow></TableHead>
               <TableBody>
-                {instructors.data?.map((person) => (
+                {instructors.data?.map((person) => {
+                  const teaching = person.roles.flatMap((item) =>
+                    (item.role === "instructor" || item.role === "course_coordinator") && item.courseIds.includes(courseId) ? [item.role] : [],
+                  );
+                  const roles = teaching.length > 0 ? teaching : ["instructor" as const];
+                  return (
                   <TableRow key={person.id}>
                     <TableCell sx={{ fontWeight: 600 }}>{person.fullName}</TableCell>
                     <TableCell>{person.email}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                        {roles.map((role) => <Chip key={role} size="small" label={roleLabel[role]} />)}
+                      </Stack>
+                    </TableCell>
                     <TableCell>{person.isActive ? "Active" : "Inactive"}</TableCell>
                     <TableCell align="right">
                       {activeRole === "admin" && (
@@ -228,20 +325,83 @@ export default function RosterImportPage() {
                           }
                         }}>{person.isActive ? "Deactivate" : "Reactivate"}</Button>
                       )}
-                      <Button size="small" color="error" disabled={person.id === user.id} onClick={() => setRemoving({ person, role: "instructor" })}>Remove</Button>
+                      {activeRole === "admin" && <Button size="small" onClick={() => setEditing(person)}>Edit</Button>}
+                      {activeRole === "admin" && (
+                        <Button size="small" disabled={person.id === user.id} onClick={() => issuePassword(person)}>Reset password</Button>
+                      )}
+                      {activeRole === "admin" && (
+                        <Button size="small" color="error" disabled={person.id === user.id} onClick={() => { setConfirmEmail(""); setDeleting(person); }}>Delete account</Button>
+                      )}
+                      {roles.filter((role) => role !== "course_coordinator" || activeRole === "admin").map((role) => (
+                        <Button key={role} size="small" color="error" disabled={person.id === user.id} onClick={() => setRemoving({ person, role })}>
+                          Remove {roleLabel[role].toLowerCase()}
+                        </Button>
+                      ))}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </Box>
         )}
       </Paper>
 
+      <EditAccountDialog
+        key={editing?.id}
+        person={editing}
+        requireStudentId={Boolean(editing?.roles.some((item) => item.role === "student"))}
+        onClose={() => setEditing(undefined)}
+        onSaved={(updated) => {
+          const merge = (item: User) => item.id === updated.id ? { ...item, ...updated, rosterStatus: item.rosterStatus } : item;
+          roster.setData((current) => current?.map(merge));
+          instructors.setData((current) => current?.map(merge));
+          setMessage({ kind: "success", text: `${updated.fullName}'s account was updated.` });
+        }}
+      />
+
+      <Dialog open={Boolean(deleting)} onClose={() => setDeleting(undefined)}>
+        <DialogTitle>Delete {deleting?.fullName}'s account?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            The login stops working and class memberships are removed. Charts and notes stay so the grade record remains. Type {deleting?.email} to confirm.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Email"
+            value={confirmEmail}
+            onChange={(event) => setConfirmEmail(event.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleting(undefined)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={!deleting || confirmEmail.trim().toLowerCase() !== deleting.email.toLowerCase()}
+            onClick={async () => {
+              const target = deleting!;
+              try {
+                await deleteAccount(target.id, confirmEmail.trim());
+                roster.reload();
+                instructors.reload();
+                setMessage({ kind: "success", text: `${target.fullName}'s login was removed. Charts and notes were kept.` });
+              } catch (e) {
+                setMessage({ kind: "error", text: (e as Error).message });
+              }
+              setDeleting(undefined);
+            }}
+          >Delete account</Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={Boolean(removing)} onClose={() => setRemoving(undefined)}>
         <DialogTitle>Remove {removing?.person.fullName} from {course.data?.code}?</DialogTitle>
         <DialogContent>
-          <DialogContentText>They lose access to this course's patients. Their signed notes stay in the record.</DialogContentText>
+          <DialogContentText>
+            Remove deletes this enrollment. Deactivate is the reversible choice: it keeps their charts and notes and only turns access off.
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRemoving(undefined)}>Cancel</Button>

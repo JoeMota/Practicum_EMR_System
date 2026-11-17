@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import type { Role } from "../../types";
 import { homePathFor } from "../../utils/permissions";
-import { useAuth } from "./AuthContext";
+import { useAuth } from "./useSession";
 
 interface Props {
   roles?: Role[];

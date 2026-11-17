@@ -30,7 +30,7 @@ export default function ChartReference({ patient: p }: { patient: Patient }) {
         <Row key={l.id} label={l.name} value={`${l.value} ${l.unit}${l.flag ? ` ${l.flag}` : ""}`} flag={Boolean(l.flag)} />
       )),
     },
-    { title: "Vitals", body: p.vitals.map((v) => <Row key={v.label} label={v.label} value={v.value} />) },
+    { title: "Vitals", body: p.vitals.filter((v) => v.status !== "entered_in_error").map((v) => <Row key={v.id ?? v.label} label={v.label} value={v.value} />) },
     {
       title: "History", body: (
         <>

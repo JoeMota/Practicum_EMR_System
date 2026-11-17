@@ -1,14 +1,15 @@
 import { Box, Button, Typography } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
-import { useSession } from "../features/auth/AuthContext";
+import { useSession } from "../features/auth/useSession";
 import { homePathFor } from "../utils/permissions";
 
 export default function NotFoundPage() {
   const { activeRole } = useSession();
   const home = homePathFor(activeRole);
   const homeLabel =
-    activeRole === "admin" ? "Go to roster"
-      : activeRole === "instructor" || activeRole === "student" ? "Go to dashboard"
+    activeRole === "admin" ? "Go to administration"
+      : activeRole === "instructor" || activeRole === "course_coordinator" || activeRole === "student" ? "Go to dashboard"
+        : activeRole === "patient" ? "Go to my chart"
         : "Go to patients";
 
   return (

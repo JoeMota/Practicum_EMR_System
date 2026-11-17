@@ -1,6 +1,6 @@
 import { Alert, Box, LinearProgress } from "@mui/material";
-import { useSession } from "../auth/AuthContext";
-import { usePageHeading } from "../../components/PageHeading";
+import { useSession } from "../auth/useSession";
+import { usePageHeading } from "../../components/usePageHeading";
 import StudentDashboard from "./StudentDashboard";
 import InstructorDashboard from "./InstructorDashboard";
 
@@ -9,7 +9,7 @@ export default function DashboardPage() {
   usePageHeading("Dashboard");
 
   if (activeRole === "student") return <StudentDashboard />;
-  if (activeRole === "instructor") return <InstructorDashboard />;
+  if (activeRole === "instructor" || activeRole === "course_coordinator") return <InstructorDashboard />;
 
   return (
     <Box>

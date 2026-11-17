@@ -3,23 +3,20 @@ import { ApiError, request } from "./client";
 
 export interface LoginResult {
   accessToken: string;
+  refreshToken?: string;
   mustChangePassword: boolean;
   user: User;
 }
 
 interface TokenResponse {
   access_token: string;
+  refresh_token?: string;
   mustChangePassword: boolean;
   user: User;
 }
 
-const ALLOWED = /@(miners\.)?utep\.edu$/i;
-
 export async function login(email: string, password: string): Promise<LoginResult> {
   const trimmed = email.trim();
-  if (!ALLOWED.test(trimmed)) {
-    throw new ApiError(400, "Use your UTEP email address (@utep.edu or @miners.utep.edu).");
-  }
   const form = new URLSearchParams();
   form.set("username", trimmed);
   form.set("password", password);
@@ -27,15 +24,20 @@ export async function login(email: string, password: string): Promise<LoginResul
     const body = await request<TokenResponse>("/auth/login", { method: "POST", form, auth: false });
     return {
       accessToken: body.access_token,
+      refreshToken: body.refresh_token,
       mustChangePassword: body.mustChangePassword,
       user: body.user,
     };
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      throw new ApiError(401, "That email and password don't match an EMR account. Ask your instructor to confirm you're on the course roster.");
+      throw new ApiError(401, "That email and password don't match an active account.");
     }
     throw error;
   }
+}
+
+export async function logout(refreshToken: string): Promise<void> {
+  await request<void>("/auth/logout", { method: "POST", json: { refreshToken }, auth: false });
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
@@ -43,4 +45,17 @@ export async function changePassword(currentPassword: string, newPassword: strin
     method: "POST",
     json: { currentPassword, newPassword },
   });
+}
+
+export async function setActingRole(role: string): Promise<LoginResult> {
+  const body = await request<TokenResponse>("/auth/acting-role", {
+    method: "POST",
+    json: { role },
+  });
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token,
+    mustChangePassword: body.mustChangePassword,
+    user: body.user,
+  };
 }

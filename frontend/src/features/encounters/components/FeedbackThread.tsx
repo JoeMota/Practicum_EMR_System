@@ -8,18 +8,30 @@ const KIND_LABEL: Record<NoteComment["kind"], string> = {
   comment: "Comment",
 };
 
-export default function FeedbackThread({ items }: { items: NoteComment[] }) {
+const SECTION_LABEL: Record<NonNullable<NoteComment["sectionId"]>, string> = {
+  S: "Subjective",
+  O: "Objective",
+  MR: "Medication reconciliation",
+  A: "Assessment",
+  P: "Plan",
+};
+
+export default function FeedbackThread({ items, hideSection = false }: { items: NoteComment[]; hideSection?: boolean }) {
   if (items.length === 0) return null;
   return (
     <Stack spacing={1.5}>
-      {items.map((c) => (
-        <Box key={c.id} sx={{ borderLeft: 3, borderColor: c.kind === "returned" ? "error.main" : "success.main", pl: 1.5 }}>
-          <Typography variant="caption" color="text.secondary">
-            {KIND_LABEL[c.kind]} by {c.authorName}, {formatDateTime(c.createdAt)}
-          </Typography>
-          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{c.body}</Typography>
-        </Box>
-      ))}
+      {items.map((c) => {
+        const section = !hideSection && c.sectionId ? `${SECTION_LABEL[c.sectionId]} — ` : "";
+        const tone = c.kind === "returned" ? "error.main" : c.kind === "comment" ? "info.main" : "success.main";
+        return (
+          <Box key={c.id} sx={{ borderLeft: 3, borderColor: tone, pl: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              {section}{KIND_LABEL[c.kind]} by {c.authorName}, {formatDateTime(c.createdAt)}
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{c.body}</Typography>
+          </Box>
+        );
+      })}
     </Stack>
   );
 }
