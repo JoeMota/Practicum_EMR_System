@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { courseIdsForRole } from "../../utils/permissions";
-import { logout } from "../../api/auth";
+import { logout, setActingRole } from "../../api/auth";
 import {
   readSession, refreshAccessToken, SESSION_EVENT, setSignedOutNotice, tokenExpiresAt, writeSession,
   type StoredSession,
 } from "../../api/client";
 import { AuthContext, type AuthCtx } from "./useSession";
+import type { Role } from "../../types";
 
 const IDLE_MS = 15 * 60 * 1000;
 
@@ -102,11 +103,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!sessionRef.current) return;
         persist({ ...sessionRef.current, mustChangePassword: false });
       },
-      switchRole: (role) => {
+      switchRole: (role: Role) => {
         const current = sessionRef.current;
         if (!current) return;
         const keepCourse = current.courseId && courseIdsForRole(current.user, role).includes(current.courseId);
-        persist({ ...current, activeRole: role, courseId: keepCourse ? current.courseId : undefined });
+        const nextCourse = keepCourse ? current.courseId : undefined;
+        persist({ ...current, activeRole: role, courseId: nextCourse });
+        void setActingRole(role)
+          .then((result) => {
+            const live = sessionRef.current;
+            if (!live) return;
+            persist({
+              ...live,
+              user: result.user,
+              activeRole: role,
+              courseId: live.courseId && courseIdsForRole(result.user, role).includes(live.courseId)
+                ? live.courseId
+                : nextCourse,
+              accessToken: result.accessToken,
+              refreshToken: result.refreshToken ?? live.refreshToken,
+              mustChangePassword: result.mustChangePassword,
+            });
+          })
+          .catch(() => undefined);
       },
       selectCourse: (courseId) => {
         const current = sessionRef.current;

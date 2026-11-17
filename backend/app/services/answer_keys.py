@@ -1,12 +1,13 @@
-"""One answer key per case master. Students cannot read it, even after a release timestamp is set."""
+"""One answer key per case master. Students read it only after release and cosign."""
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.clinical import CaseAnswerKey, Patient
+from app.models.clinical import CaseAnswerKey, ClinicalNote, Patient
 from app.models.user import User
 from app.schemas.clinical import AnswerKeyIn
 from app.services.access import can, require_course
@@ -15,6 +16,23 @@ from app.services.audit import log_event
 
 def can_read_answer_key(role: str) -> bool:
     return role == "admin" or can(role, "case:author") or can(role, "note:cosign")
+
+
+async def student_may_read_answer_key(db: AsyncSession, *, patient: Patient, user: User) -> bool:
+    """CASE-05 / REV-07: released timestamp on the copy + a cosigned note by this student."""
+    if patient.answer_key_released_at is None:
+        return False
+    if patient.owner_id != user.id:
+        return False
+    note = await db.scalar(
+        select(ClinicalNote.id).where(
+            ClinicalNote.patient_id == patient.id,
+            ClinicalNote.author_id == user.id,
+            ClinicalNote.status == "cosigned",
+            ClinicalNote.archived.is_(False),
+        ).limit(1)
+    )
+    return note is not None
 
 
 async def deny_answer_key(
@@ -27,9 +45,17 @@ async def deny_answer_key(
     entity_id: str,
     ip: str | None,
     action: str,
+    patient: Patient | None = None,
 ) -> None:
     require_course(role, course_id, user, rows)
-    allowed = can(role, "case:author") if action == "answer_key.update" else can_read_answer_key(role)
+    if action == "answer_key.update":
+        allowed = can(role, "case:author")
+    elif can_read_answer_key(role):
+        allowed = True
+    elif role == "student" and patient is not None:
+        allowed = await student_may_read_answer_key(db, patient=patient, user=user)
+    else:
+        allowed = False
     if allowed:
         return
     await log_event(
@@ -46,6 +72,22 @@ async def deny_answer_key(
     await db.commit()
     message = "Your role can't edit answer keys." if action == "answer_key.update" else "Your role can't view answer keys."
     raise HTTPException(status.HTTP_403_FORBIDDEN, message)
+
+
+async def release_answer_key(db: AsyncSession, patient: Patient, actor: User) -> Patient:
+    if patient.mode not in {"assessment", "simulation"}:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Release the answer key on a student's assigned chart.")
+    if patient.source_patient_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This chart has no case answer key to release.")
+    master = await db.get(Patient, patient.source_patient_id)
+    if master is None or master.mode != "case":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case answer key not found.")
+    key = await db.scalar(select(CaseAnswerKey.id).where(CaseAnswerKey.patient_id == master.id))
+    if key is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Write an answer key on the case before releasing it.")
+    patient.answer_key_released_at = datetime.now(timezone.utc)
+    await db.flush()
+    return patient
 
 
 async def read_answer_key(db: AsyncSession, patient: Patient) -> dict:

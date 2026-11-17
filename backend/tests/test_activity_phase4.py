@@ -156,7 +156,8 @@ async def test_at_risk_flags_idle_students_and_clears_after_a_submitted_note(cli
         },
     )
     assert imported.status_code == 200, imported.text
-    found = await client.get("/api/v1/users", headers=instructor, params={"q": "idle.student"})
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
+    found = await client.get("/api/v1/users", headers=admin, params={"q": "idle.student"})
     assert found.status_code == 200, found.text
     idle_id = found.json()[0]["id"]
 
@@ -188,7 +189,7 @@ async def test_at_risk_flags_idle_students_and_clears_after_a_submitted_note(cli
 
 @pytest.mark.asyncio
 async def test_delete_anonymizes_login_and_keeps_the_note(client):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     instructor, _ = await login(client, "joe.mota@utep.edu")
     student, me = await login(client, "daniel.reyes@miners.utep.edu")
     course = await course_id(client, student, "PHAR 5320")
@@ -234,7 +235,7 @@ async def test_delete_anonymizes_login_and_keeps_the_note(client):
 
 @pytest.mark.asyncio
 async def test_retrieve_makes_an_archived_course_active(client):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     created = await client.post(
         "/api/v1/courses",
         headers=admin,

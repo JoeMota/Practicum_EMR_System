@@ -96,7 +96,17 @@ def holds_role(user: User, role: str, rows: list[CourseMembership]) -> bool:
     return any(row.role.code == role for row in rows)
 
 
+def require_acting_role(user: User, role: str) -> None:
+    """ADM-05: authorize against the session's active role only."""
+    if user.acting_role and user.acting_role != role:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"You're signed in as {user.acting_role}. Switch roles to use {role} permissions.",
+        )
+
+
 def require_held_role(user: User, role: str, rows: list[CourseMembership]) -> None:
+    require_acting_role(user, role)
     if not holds_role(user, role, rows):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have that role.")
 

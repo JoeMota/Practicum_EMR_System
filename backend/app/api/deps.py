@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -6,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import decode_access_token
+from app.core.security import decode_access_payload
 from app.db.session import get_db
 from app.models.user import User
 from app.services.auth import get_user_by_id, is_usable, permission_codes
@@ -24,8 +25,11 @@ async def get_current_user_allow_password_change(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    sub = decode_access_token(token)
-    if sub is None:
+    payload = decode_access_payload(token)
+    if payload is None:
+        raise unauthorized
+    sub = payload.get("sub")
+    if not isinstance(sub, str):
         raise unauthorized
     try:
         user_id = uuid.UUID(sub)
@@ -34,6 +38,12 @@ async def get_current_user_allow_password_change(
     user = await get_user_by_id(db, user_id)
     if user is None or not is_usable(user):
         raise unauthorized
+    # Touch activity so /auth/refresh can enforce idle logout (SEC-03).
+    user.last_activity_at = datetime.now(timezone.utc)
+    # ADM-05: the access token's role claim is the session acting role for this request.
+    token_role = payload.get("role")
+    if isinstance(token_role, str) and token_role:
+        user.acting_role = token_role
     return user
 
 

@@ -14,9 +14,10 @@ SECOND_PHOTO = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8A
 @pytest.mark.asyncio
 async def test_students_cannot_open_an_ended_course(client):
     instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     student, _ = await login(client, "daniel.reyes@miners.utep.edu")
     course = await course_id(client, instructor, "PHAR 5320")
-    ended = await client.post(f"/api/v1/courses/{course}/status", headers=instructor, json={"status": "ended"})
+    ended = await client.post(f"/api/v1/courses/{course}/status", headers=admin, json={"status": "ended"})
     assert ended.status_code == 200, ended.text
 
     blocked = await client.get("/api/v1/patients", headers=student, params={"course_id": course, "role": "student"})

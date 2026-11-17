@@ -70,8 +70,11 @@ async def db_session():
 
 @pytest.fixture
 async def client(db_session):
+    from app.api.routes.auth import clear_login_rate_limits
     from app.db.session import get_db
     from app.main import app
+
+    clear_login_rate_limits()
 
     async def override():
         yield db_session
@@ -80,3 +83,4 @@ async def client(db_session):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
     app.dependency_overrides.clear()
+    clear_login_rate_limits()

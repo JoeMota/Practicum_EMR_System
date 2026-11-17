@@ -94,6 +94,10 @@ export async function getChartAnswerKey(role: Role, patientId: string): Promise<
   return request<AnswerKey>(`/patients/${patientId}/answer-key`, { query: { role } });
 }
 
+export async function releaseChartAnswerKey(role: Role, patientId: string): Promise<{ released: boolean; answerKeyReleasedAt?: string }> {
+  return request(`/patients/${patientId}/answer-key/release`, { method: "POST", query: { role } });
+}
+
 export async function uploadCaseRubric(role: Role, caseId: string, file: File): Promise<GradingGuide> {
   const formData = new FormData();
   formData.append("file", file);

@@ -24,6 +24,7 @@ import NoteProgress from "./components/NoteProgress";
 import FeedbackThread from "./components/FeedbackThread";
 import Addenda from "./components/Addenda";
 import CourseRubricPanel from "./components/CourseRubricPanel";
+import AnswerKeyPanel from "./components/AnswerKeyPanel";
 import { defaultTemplateFor, diagnosesFromPatient, prefillFromPatient, templateName, templatesFor, TEMPLATES, type NoteTemplate } from "./noteTemplates";
 import { suggestionsFor } from "./suggestionPacks";
 
@@ -489,6 +490,11 @@ export default function NoteEditorPage() {
             <Typography component="h2" variant="subtitle1" sx={{ mb: 1 }}>{isSimulation ? "Simulation note" : isAssessment ? "Submission" : "Practice note"}</Typography>
             <NoteProgress note={note} />
             {activeRole !== "student" && <CourseRubricPanel guide={guide.data} fileName={guide.data?.file_name} />}
+            {activeRole === "student" && note.status === "cosigned" && (
+              <Box sx={{ mt: 2 }}>
+                <AnswerKeyPanel role={activeRole} patientId={patient.id} />
+              </Box>
+            )}
 
             {editable && (
               <Stack spacing={1.5} sx={{ mt: 2 }}>

@@ -11,7 +11,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../features/auth/useSession";
 import { getCourse, listCoursesForUser } from "../api/courses";
 import { useDisplayPrefs } from "../theme/useDisplayPrefs";
-import { trainingStripe, utep } from "../theme/tokens";
+import { brandAccentBar, fontDisplay, utep } from "../theme/tokens";
 import { disciplineLabel, roleLabel } from "../utils/labels";
 import { courseIdsForRole, homePathFor, uniqueRoles } from "../utils/permissions";
 import { useAsync } from "../utils/useAsync";
@@ -19,7 +19,7 @@ import { usePageHeadingValue } from "./usePageHeading";
 import type { Role } from "../types";
 
 const pickerSx = {
-  bgcolor: "#fff", color: utep.navy, fontWeight: 600, borderRadius: "10px", height: 44,
+  bgcolor: "#fff", color: utep.navy, fontWeight: 600, borderRadius: 1, height: 40,
   "& fieldset": { border: "none" },
 };
 
@@ -62,9 +62,10 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
     <>
       <AppBar
         position="sticky" elevation={0}
-        sx={{ bgcolor: utep.orange, color: utep.navy, borderBottom: `4px solid ${utep.navy}` }}
+        sx={{ bgcolor: utep.paper, color: utep.navy, borderBottom: `1px solid ${utep.lineSoft}` }}
       >
-        <Toolbar sx={{ gap: 1.5, flexWrap: "wrap", py: 1.5, px: { xs: 2, md: 3 }, minHeight: { md: 76 } }}>
+        <Box aria-hidden sx={{ height: 3, background: brandAccentBar }} />
+        <Toolbar sx={{ gap: 1.25, flexWrap: "wrap", py: 1.25, px: { xs: 2, md: 3 }, minHeight: { md: 64 } }}>
           <IconButton
             aria-label="Open navigation" onClick={onOpenNav}
             sx={{ display: { md: "none" }, color: utep.navy, minWidth: 44, minHeight: 44 }}
@@ -80,11 +81,21 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
           </IconButton>
 
           <Box sx={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Typography component="h1" sx={{ fontWeight: 800, fontSize: heading ? 22 : 16, lineHeight: 1.2, color: utep.navy }}>
+            <Typography
+              component="h1"
+              sx={{
+                fontFamily: fontDisplay,
+                fontWeight: 700,
+                fontSize: heading ? 22 : 16,
+                lineHeight: 1.2,
+                color: utep.navy,
+                letterSpacing: "-0.02em",
+              }}
+            >
               {heading?.title ?? courseLabel}
             </Typography>
             {heading && (
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: utep.navy, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: utep.ink2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {courseLabel}
               </Typography>
             )}
@@ -94,8 +105,9 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
             <Box
               component="form" role="search" onSubmit={search}
               sx={{
-                flex: "0 1 280px", display: "flex", alignItems: "center", gap: 1, px: 1.75, height: 44,
-                bgcolor: "#fff", borderRadius: "999px", color: "text.secondary",
+                flex: "0 1 280px", display: "flex", alignItems: "center", gap: 1, px: 1.5, height: 40,
+                bgcolor: "rgba(14,34,80,0.04)", borderRadius: 1, color: "text.secondary",
+                boxShadow: `inset 0 0 0 1px ${utep.lineSoft}`,
               }}
             >
               <SearchRounded fontSize="small" aria-hidden />
@@ -144,8 +156,8 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
                 switchRole(role);
                 navigate(homePathFor(role));
               }}
-              sx={{ ...pickerSx, bgcolor: utep.navy, color: "#fff", borderRadius: "999px", "& .MuiSvgIcon-root": { color: "#fff" } }}
-              renderValue={(v) => `Acting as: ${roleLabel[v as Role]}`}
+              sx={{ ...pickerSx, bgcolor: utep.navy, color: "#fff", "& .MuiSvgIcon-root": { color: "#fff" } }}
+              renderValue={(v) => roleLabel[v as Role]}
             >
               {roles.map((role) => <MenuItem key={role} value={role}>{roleLabel[role]}</MenuItem>)}
             </Select>
@@ -175,24 +187,23 @@ export default function AppHeader({ onOpenNav }: { onOpenNav: () => void }) {
             </Box>
           </Menu>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Box sx={{ textAlign: "right", lineHeight: 1.25, display: { xs: "none", sm: "block" } }}>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>{user.fullName}</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                 {roleLabel[activeRole]}{discipline ? `, ${disciplineLabel[discipline]}` : ""}
               </Typography>
             </Box>
             <Box
               aria-hidden
-              sx={{ width: 42, height: 42, borderRadius: "50%", bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 700 }}
+              sx={{ width: 36, height: 36, borderRadius: 1, bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}
             >
               {initials}
             </Box>
-            <Chip label="Training" size="small" sx={{ bgcolor: utep.navy, color: "#fff", display: { xs: "none", md: "flex" } }} />
+            <Chip label="Training" size="small" variant="outlined" sx={{ display: { xs: "none", md: "flex" }, borderColor: utep.line }} />
           </Box>
         </Toolbar>
       </AppBar>
-      <Box aria-hidden sx={{ height: 4, background: trainingStripe }} />
     </>
   );
 }

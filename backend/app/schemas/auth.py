@@ -19,3 +19,7 @@ class RefreshRequest(APIModel):
 class ChangePasswordRequest(APIModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class ActingRoleRequest(APIModel):
+    role: str = Field(min_length=2, max_length=40)

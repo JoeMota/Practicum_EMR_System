@@ -218,7 +218,7 @@ function TrendSvg({ points, labels }: { points: number[]; labels: string[] }) {
         {yTicks.map((tick) => (
           <g key={tick}>
             <line x1={pad.l} x2={w - pad.r} y1={y(tick)} y2={y(tick)} stroke={utep.line} strokeDasharray="4 6" />
-            <text x={pad.l - 8} y={y(tick) + 4} textAnchor="end" fill={utep.ink2} fontSize="11" fontFamily="Public Sans, sans-serif">
+            <text x={pad.l - 8} y={y(tick) + 4} textAnchor="end" fill={utep.ink2} fontSize="11" fontFamily="Source Sans 3, sans-serif">
               {Math.round(tick)}
             </text>
           </g>
@@ -230,7 +230,7 @@ function TrendSvg({ points, labels }: { points: number[]; labels: string[] }) {
         ))}
         {labels.map((label, i) =>
           i % labelEvery === 0 ? (
-            <text key={`${label}-${i}`} x={x(i)} y={h - 8} textAnchor="middle" fill={utep.ink2} fontSize="11" fontFamily="Public Sans, sans-serif">
+            <text key={`${label}-${i}`} x={x(i)} y={h - 8} textAnchor="middle" fill={utep.ink2} fontSize="11" fontFamily="Source Sans 3, sans-serif">
               {label}
             </text>
           ) : null,

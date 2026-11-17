@@ -17,7 +17,7 @@ interface Props {
   compact?: boolean;
 }
 
-const card = { borderRadius: "16px", overflow: "hidden" } as const;
+const card = { borderRadius: 1, overflow: "hidden", border: "none", boxShadow: `inset 0 0 0 1px ${utep.lineSoft}` } as const;
 
 export default function PatientBanner({ patient: p, ownerName, onEditStatus, compact }: Props) {
   const { activeRole } = useSession();

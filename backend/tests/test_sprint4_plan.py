@@ -127,6 +127,7 @@ async def test_login_locks_after_five_failures_and_logout_revokes_refresh(client
 @pytest.mark.asyncio
 async def test_dose_flags_follow_the_course_mode(client):
     instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     student, _ = await login(client, "daniel.reyes@miners.utep.edu")
     course = await course_id(client, instructor, "PHAR 5320")
     chart = await patient_by_mrn(client, student, course, "student", "TR-10021-DR")
@@ -142,7 +143,7 @@ async def test_dose_flags_follow_the_course_mode(client):
 
     blocked_mode = await client.patch(
         f"/api/v1/courses/{course}/policy",
-        headers=instructor,
+        headers=admin,
         json={"guardrailMode": "block"},
     )
     assert blocked_mode.status_code == 200, blocked_mode.text
@@ -156,7 +157,7 @@ async def test_dose_flags_follow_the_course_mode(client):
 
     ack_mode = await client.patch(
         f"/api/v1/courses/{course}/policy",
-        headers=instructor,
+        headers=admin,
         json={"guardrailMode": "acknowledge"},
     )
     assert ack_mode.status_code == 200, ack_mode.text
@@ -184,9 +185,10 @@ async def test_dose_flags_follow_the_course_mode(client):
 
 @pytest.mark.asyncio
 async def test_portal_lists_coverage_and_cpt_search_omits_deleted_telehealth(client, db_session):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
-    course = await course_id(client, admin, "PHAR 5320")
-    rosa = await patient_by_mrn(client, admin, course, "instructor", "TR-20001")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
+    instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    course = await course_id(client, instructor, "PHAR 5320")
+    rosa = await patient_by_mrn(client, instructor, course, "instructor", "TR-20001")
     headers, _ = await _portal_headers(client, db_session, rosa["id"], "coverage")
     portal = await client.get("/api/v1/portal", headers=headers)
     assert portal.status_code == 200, portal.text
@@ -199,6 +201,7 @@ async def test_portal_lists_coverage_and_cpt_search_omits_deleted_telehealth(cli
 @pytest.mark.asyncio
 async def test_assist_stays_off_for_protected_notes_and_does_not_save(client, monkeypatch):
     instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     student, _ = await login(client, "daniel.reyes@miners.utep.edu")
     course = await course_id(client, instructor, "PHAR 5320")
     chart = await patient_by_mrn(client, student, course, "student", "TR-10021-DR")
@@ -229,7 +232,7 @@ async def test_assist_stays_off_for_protected_notes_and_does_not_save(client, mo
     assert off.status_code == 409
     assert calls["count"] == 0
 
-    enabled = await client.patch(f"/api/v1/courses/{course}/policy", headers=instructor, json={"aiAssist": True})
+    enabled = await client.patch(f"/api/v1/courses/{course}/policy", headers=admin, json={"aiAssist": True})
     assert enabled.status_code == 200, enabled.text
     suggested = await client.post(
         f"/api/v1/notes/{note_id}/suggest",
@@ -275,7 +278,7 @@ async def test_assist_stays_off_for_protected_notes_and_does_not_save(client, mo
 
 @pytest.mark.asyncio
 async def test_intro_course_is_seeded_and_provider_flag_is_separate(client):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     listed = await client.get("/api/v1/courses", headers=admin)
     assert listed.status_code == 200, listed.text
     rows = listed.json()
@@ -291,6 +294,7 @@ async def test_intro_course_is_seeded_and_provider_flag_is_separate(client):
 @pytest.mark.asyncio
 async def test_inserted_text_runs_the_course_dose_flags(client):
     instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
     student, _ = await login(client, "daniel.reyes@miners.utep.edu")
     course = await course_id(client, instructor, "PHAR 5320")
     chart = await patient_by_mrn(client, student, course, "student", "TR-10021-DR")
@@ -313,7 +317,7 @@ async def test_inserted_text_runs_the_course_dose_flags(client):
     assert advisory.json()["needsAcknowledgement"] is False
 
     blocked = await client.patch(
-        f"/api/v1/courses/{course}/policy", headers=instructor, json={"guardrailMode": "block"},
+        f"/api/v1/courses/{course}/policy", headers=admin, json={"guardrailMode": "block"},
     )
     assert blocked.status_code == 200, blocked.text
     refused = await client.post(
@@ -323,7 +327,7 @@ async def test_inserted_text_runs_the_course_dose_flags(client):
     assert refused.json()["blocked"] is True
 
     acknowledge = await client.patch(
-        f"/api/v1/courses/{course}/policy", headers=instructor, json={"guardrailMode": "acknowledge"},
+        f"/api/v1/courses/{course}/policy", headers=admin, json={"guardrailMode": "acknowledge"},
     )
     assert acknowledge.status_code == 200, acknowledge.text
     pending = await client.post(

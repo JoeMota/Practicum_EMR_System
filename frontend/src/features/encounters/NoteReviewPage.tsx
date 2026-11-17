@@ -5,7 +5,7 @@ import {
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { commentOnNote, cosignNote, getNote, instructorEditNote, returnNote } from "../../api/notes";
 import { getPatient } from "../../api/patients";
-import { getChartGradingGuide } from "../../api/cases";
+import { getChartGradingGuide, releaseChartAnswerKey } from "../../api/cases";
 import { useSession } from "../auth/useSession";
 import { useAsync } from "../../utils/useAsync";
 import { formatDateTime } from "../../utils/format";
@@ -35,6 +35,8 @@ export default function NoteReviewPage() {
   const [editing, setEditing] = useState(false);
   const [draftContent, setDraftContent] = useState<Record<string, string>>({});
   const [draftDiagnoses, setDraftDiagnoses] = useState<IcdCode[]>([]);
+  const [releaseBusy, setReleaseBusy] = useState(false);
+  const [releaseNote, setReleaseNote] = useState("");
 
   const load = useAsync(async () => {
     const note = await getNote(activeRole, noteId);
@@ -152,6 +154,34 @@ export default function NoteReviewPage() {
 
         <Paper sx={{ p: 2.5, position: { lg: "sticky" }, top: { lg: 88 }, gridColumn: { md: "2", lg: "2" } }}>
           <AnswerKeyPanel role={activeRole} patientId={patient.id} />
+          {note.status === "cosigned" && (
+            <Stack spacing={1} sx={{ mt: 2 }}>
+              {releaseNote && <Alert severity="success">{releaseNote}</Alert>}
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={releaseBusy}
+                onClick={async () => {
+                  setReleaseBusy(true);
+                  setReleaseNote("");
+                  setError("");
+                  try {
+                    await releaseChartAnswerKey(activeRole, patient.id);
+                    setReleaseNote("Answer key released. The student can read it on this chart.");
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setReleaseBusy(false);
+                  }
+                }}
+              >
+                Release answer key to student
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                Students see the key only after co-sign and this release.
+              </Typography>
+            </Stack>
+          )}
           {note.status !== "cosigned" && <TriggersPanel role={activeRole} patientId={patient.id} />}
         </Paper>
 

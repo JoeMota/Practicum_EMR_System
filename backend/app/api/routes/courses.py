@@ -42,7 +42,9 @@ def _ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-def _require_admin(user: User, rows) -> None:
+def _require_admin(user: User, rows, role: str = "admin") -> None:
+    if role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Switch to Administrator to manage courses.")
     require_held_role(user, "admin", rows)
 
 
@@ -59,9 +61,15 @@ def _require_roster_role(staff_role: str, target_role: str) -> None:
 
 
 @router.post("", response_model=CourseOut, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
-async def create_course(body: CourseCreate, db: DbSession, user: CurrentUser, request: Request):
+async def create_course(
+    body: CourseCreate,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()] = "admin",
+):
     rows = await memberships_for(db, user.id)
-    _require_admin(user, rows)
+    _require_admin(user, rows, role)
     require("admin", "course:create", "Your role can't create courses.")
     code = body.code.strip()
     title = body.title.strip()
@@ -371,10 +379,15 @@ async def remove_from_course(
 
 @router.post("/{course_id}/status", response_model=CourseOut, response_model_exclude_none=True)
 async def update_course_status(
-    course_id: uuid.UUID, body: CourseStatusPatch, db: DbSession, user: CurrentUser, request: Request
+    course_id: uuid.UUID,
+    body: CourseStatusPatch,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()] = "admin",
 ):
     rows = await memberships_for(db, user.id)
-    _require_admin(user, rows)
+    _require_admin(user, rows, role)
     require("admin", "course:manage_status", "Your role can't manage course status.")
     course = await db.get(Course, course_id)
     if course is None:
@@ -399,10 +412,15 @@ async def update_course_status(
 
 @router.patch("/{course_id}/inactivity-days", response_model=CourseOut, response_model_exclude_none=True)
 async def set_inactivity_days(
-    course_id: uuid.UUID, body: InactivityDaysPatch, db: DbSession, user: CurrentUser, request: Request
+    course_id: uuid.UUID,
+    body: InactivityDaysPatch,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()] = "admin",
 ):
     rows = await memberships_for(db, user.id)
-    _require_admin(user, rows)
+    _require_admin(user, rows, role)
     require("admin", "course:manage_status", "Your role can't change the activity window.")
     course = await db.get(Course, course_id)
     if course is None:
@@ -424,10 +442,15 @@ async def set_inactivity_days(
 
 @router.patch("/{course_id}/policy", response_model=CourseOut, response_model_exclude_none=True)
 async def set_course_policy(
-    course_id: uuid.UUID, body: CoursePolicyPatch, db: DbSession, user: CurrentUser, request: Request
+    course_id: uuid.UUID,
+    body: CoursePolicyPatch,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()] = "admin",
 ):
     rows = await memberships_for(db, user.id)
-    _require_admin(user, rows)
+    _require_admin(user, rows, role)
     require("admin", "course:manage_status", "Your role can't change course settings.")
     course = await db.get(Course, course_id)
     if course is None:

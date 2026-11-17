@@ -12,8 +12,9 @@ import PageError from "../../components/PageError";
 import { actionLabel } from "./auditLabels";
 
 export default function AuditLogPage() {
-  usePageHeading("Activity log");
   const { user, courseId: sessionCourseId, activeRole } = useSession();
+  const mineOnly = activeRole === "student";
+  usePageHeading(mineOnly ? "My activity" : "Activity log");
   const adminView = activeRole === "admin" && !sessionCourseId;
   const courses = useAsync(() => (adminView ? listCoursesForUser() : Promise.resolve([])), [adminView, user.id]);
   const [pickedCourseId, setPickedCourseId] = useState("");
@@ -39,9 +40,11 @@ export default function AuditLogPage() {
       <Box sx={{ display: "flex", alignItems: "flex-end", gap: 2, flexWrap: "wrap", mb: 2 }}>
         <Box sx={{ flex: 1, minWidth: 220 }}>
           <Typography variant="body2" color="text.secondary">
-            {adminView
-              ? "Recorded actions. Entries can't be edited or deleted."
-              : "Chart views, note actions, and denied attempts. Entries can't be edited or deleted."}
+            {mineOnly
+              ? "Your chart views and note actions in this course. Entries can't be edited or deleted."
+              : adminView
+                ? "Recorded actions. Entries can't be edited or deleted."
+                : "Chart views, note actions, and denied attempts. Entries can't be edited or deleted."}
           </Typography>
         </Box>
         {adminView && (

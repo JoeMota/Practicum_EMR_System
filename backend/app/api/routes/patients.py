@@ -60,7 +60,7 @@ from app.services.chart_edits import (
     update_medication,
 )
 from app.services.access import can, ensure_course_open, ensure_student_may_enter, may_read_note, memberships_for, require, require_course
-from app.services.answer_keys import deny_answer_key, read_answer_key
+from app.services.answer_keys import deny_answer_key, read_answer_key, release_answer_key
 from app.services.cases import deny_triggers, grading_guide_for, triggers_for
 from app.services.audit import log_event
 from app.services.charts import apply_status, assign_case, ensure_visible, load_patient, owner_name_for, reset_practice, unassign_case
@@ -290,7 +290,7 @@ async def get_copy_answer_key(
     rows = await memberships_for(db, user.id)
     await deny_answer_key(
         db, user=user, role=role, rows=rows, course_id=patient.course_id,
-        entity_id=str(patient.id), ip=_ip(request), action="answer_key.view",
+        entity_id=str(patient.id), ip=_ip(request), action="answer_key.view", patient=patient,
     )
     payload = await read_answer_key(db, patient)
     await log_event(
@@ -299,6 +299,35 @@ async def get_copy_answer_key(
     )
     await db.commit()
     return payload
+
+
+@router.post("/{patient_id}/answer-key/release", response_model_exclude_none=True)
+async def release_copy_answer_key(
+    patient_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    request: Request,
+    role: Annotated[str, Query()],
+):
+    patient = await load_patient(db, patient_id)
+    rows = await memberships_for(db, user.id)
+    require_course(role, patient.course_id, user, rows)
+    require(role, "note:cosign", "Only an instructor can release the answer key.")
+    await release_answer_key(db, patient, user)
+    await log_event(
+        db,
+        action="answer_key.release",
+        entity_type="patient",
+        entity_id=str(patient.id),
+        actor_user_id=user.id,
+        course_id=patient.course_id,
+        ip_address=_ip(request),
+    )
+    await db.commit()
+    return {
+        "released": True,
+        "answer_key_released_at": patient.answer_key_released_at,
+    }
 
 
 @router.get("/{patient_id}/grading-guide")

@@ -46,3 +46,16 @@ export async function changePassword(currentPassword: string, newPassword: strin
     json: { currentPassword, newPassword },
   });
 }
+
+export async function setActingRole(role: string): Promise<LoginResult> {
+  const body = await request<TokenResponse>("/auth/acting-role", {
+    method: "POST",
+    json: { role },
+  });
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token,
+    mustChangePassword: body.mustChangePassword,
+    user: body.user,
+  };
+}

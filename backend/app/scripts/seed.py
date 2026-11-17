@@ -355,9 +355,8 @@ async def _charts(
     await _demo_case_work(db, maya, andre, ana, clarissa, luis, gerardo, pharmacy, therapy)
 
     for practice in (rosa, elena, marcus, hector, priya, omar, keisha, tomas, nadine, sofia, deshawn):
-        await db.refresh(practice, attribute_names=["allergies", "medications", "problems", "labs", "vitals", "encounter"])
         if not practice.snapshot:
-            practice.snapshot = chart_snapshot(practice)
+            practice.snapshot = await _chart_snapshot(db, practice)
 
     await _ensure_appointment(db, einstein_ana.id, datetime(2026, 12, 15, 9, 30, tzinfo=timezone.utc), "Diabetes follow-up", "Pharmacy clinic")
     await _ensure_appointment(db, einstein_daniel.id, datetime(2026, 10, 20, 14, 0, tzinfo=timezone.utc), "A1C recheck", "Pharmacy clinic")
@@ -596,9 +595,9 @@ async def _demo_case_work(db, maya, andre, ana, clarissa, luis, gerardo, pharmac
             attribute_names=["allergies", "medications", "problems", "labs", "vitals", "encounter"],
         )
 
-    maya_ana = await _ensure_chart(db, "TR-CASE-MAYA-AR", lambda: _clone_case(maya, "TR-CASE-MAYA-AR", ana))
-    maya_clarissa = await _ensure_chart(db, "TR-CASE-MAYA-CD", lambda: _clone_case(maya, "TR-CASE-MAYA-CD", clarissa))
-    andre_luis = await _ensure_chart(db, "TR-CASE-ANDRE-LO", lambda: _clone_case(andre, "TR-CASE-ANDRE-LO", luis))
+    maya_ana = await _ensure_chart(db, "TR-CASE-MAYA-AR", lambda: _clone_case(db, maya, "TR-CASE-MAYA-AR", ana))
+    maya_clarissa = await _ensure_chart(db, "TR-CASE-MAYA-CD", lambda: _clone_case(db, maya, "TR-CASE-MAYA-CD", clarissa))
+    andre_luis = await _ensure_chart(db, "TR-CASE-ANDRE-LO", lambda: _clone_case(db, andre, "TR-CASE-ANDRE-LO", luis))
     for copy in (maya_ana, maya_clarissa, andre_luis):
         await db.refresh(copy, attribute_names=["encounter"])
 
@@ -705,7 +704,18 @@ async def _demo_case_work(db, maya, andre, ana, clarissa, luis, gerardo, pharmac
     )
 
 
-def _clone_case(source: Patient, mrn: str, owner: User) -> Patient:
+_CHART_TREE = ("allergies", "medications", "problems", "labs", "vitals", "lung_sounds", "encounter")
+
+
+async def _chart_snapshot(db, patient: Patient) -> dict:
+    """Eager-load chart children before snapshotting (async session cannot lazy-load)."""
+    await db.flush()  # keep pending child rows attached before refresh expires collections
+    await db.refresh(patient, attribute_names=list(_CHART_TREE))
+    return chart_snapshot(patient)
+
+
+async def _clone_case(db, source: Patient, mrn: str, owner: User) -> Patient:
+    await db.refresh(source, attribute_names=list(_CHART_TREE))
     chart = Patient(
         mrn=mrn,
         first_name=source.first_name,
@@ -787,6 +797,8 @@ async def _ensure_chart(db, mrn: str, factory) -> Patient:
     if found:
         return found
     chart = factory()
+    if asyncio.iscoroutine(chart):
+        chart = await chart
     db.add(chart)
     await db.flush()
     return chart
@@ -1614,8 +1626,7 @@ async def _more_demo(db, phar, daniel, clarissa, ana, gerardo, pharmacy, therapy
         ])
         db.add(elena)
         await db.flush()
-        await db.refresh(elena, attribute_names=["allergies", "medications", "problems", "labs", "vitals", "encounter"])
-        elena.snapshot = chart_snapshot(elena)
+        elena.snapshot = await _chart_snapshot(db, elena)
         db.add(Appointment(
             patient_id=elena.id,
             when=datetime(2026, 10, 28, 16, 30, tzinfo=timezone.utc),
@@ -1903,7 +1914,7 @@ async def _mixed_names(db, phar, pt, daniel, luis, gerardo, joe, pharmacy, thera
             family="Noncontributory.", surgical="None.", social="Lives in El Paso. No current tobacco.",
             encounter_type=etype,
         ))
-        await db.refresh(row, attribute_names=["allergies", "medications", "problems", "labs", "vitals", "encounter"])
+        await db.refresh(row, attribute_names=list(_CHART_TREE))
         inhaled = med == "Albuterol"
         _maybe_med(
             row, med, dose=dose, route="Inhaled" if inhaled else "PO",
@@ -1915,7 +1926,7 @@ async def _mixed_names(db, phar, pt, daniel, luis, gerardo, joe, pharmacy, thera
         if lab:
             _maybe_lab(row, lab[0], date(2026, 10, 1), value=lab[1], unit=lab[2], reference_range=lab[3], flag=lab[4])
         if mode == "practice" and not row.snapshot:
-            row.snapshot = chart_snapshot(row)
+            row.snapshot = await _chart_snapshot(db, row)
         return row
 
     charts = {

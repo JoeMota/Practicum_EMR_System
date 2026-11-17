@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Link, Paper, TextField, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Link, Tab, Tabs, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getPatient, updatePatientStatus } from "../../api/patients";
 import { grantPortalAccess } from "../../api/users";
@@ -111,7 +111,7 @@ export default function PatientChartPage() {
       />
 
       {(can(activeRole, "user:manage_access") || can(activeRole, "patient:update_status")) && (
-        <Paper sx={{ px: 2, py: 1.25, my: 2, display: "flex", gap: 1.25, flexWrap: "wrap", alignItems: "center" }}>
+        <Box sx={{ px: 0, py: 1.5, my: 1.5, display: "flex", gap: 1.25, flexWrap: "wrap", alignItems: "center", borderBottom: `1px solid ${utep.lineSoft}` }}>
           {can(activeRole, "patient:update_status") && (
             <>
               <Typography variant="body2" sx={{ fontWeight: 700, color: utep.navy }}>Placement</Typography>
@@ -133,48 +133,30 @@ export default function PatientChartPage() {
               Portal access
             </Button>
           )}
-        </Paper>
+        </Box>
       )}
 
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "180px minmax(0, 1fr)" }, alignItems: "start" }}>
-      <Box
-        role="tablist"
+      <Tabs
+        value={tab}
+        onChange={(_, next: TabId) => setParams({ tab: next }, { replace: true })}
+        variant="scrollable"
+        scrollButtons="auto"
         aria-label="Chart sections"
-        sx={{ display: "flex", gap: 0.75, flexDirection: { xs: "row", md: "column" }, flexWrap: { xs: "nowrap", md: "wrap" }, overflowX: { xs: "auto", md: "visible" }, pb: { xs: 0.5, md: 0 } }}
+        sx={{
+          mb: 2,
+          minHeight: 44,
+          borderBottom: `1px solid ${utep.lineSoft}`,
+          "& .MuiTab-root": { minHeight: 44, px: 1.75 },
+        }}
       >
-        {TABS.map((t) => {
-          const selected = tab === t.id;
-          const label = t.id === "notes" && notes.data ? `${t.label} (${notes.data.length})` : t.label;
-          return (
-            <Box
-              key={t.id}
-              component="button"
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => setParams({ tab: t.id }, { replace: true })}
-              sx={{
-                border: "none",
-                cursor: "pointer",
-                px: 1.75,
-                py: 1,
-                minHeight: 44,
-                flexShrink: 0,
-                borderRadius: "999px",
-                fontWeight: 700,
-                fontSize: 14,
-                fontFamily: "inherit",
-                bgcolor: selected ? utep.navy : "#fff",
-                color: selected ? "#fff" : utep.navy,
-                boxShadow: selected ? "none" : `inset 0 0 0 1px ${utep.line}`,
-                "&:focus-visible": { outline: `3px solid ${utep.orange}`, outlineOffset: 2 },
-              }}
-            >
-              {label}
-            </Box>
-          );
-        })}
-      </Box>
+        {TABS.map((t) => (
+          <Tab
+            key={t.id}
+            value={t.id}
+            label={t.id === "notes" && notes.data ? `${t.label} (${notes.data.length})` : t.label}
+          />
+        ))}
+      </Tabs>
 
       <Box role="tabpanel" aria-label={TABS.find((t) => t.id === tab)?.label}>
         {tab === "summary" && (
@@ -188,7 +170,7 @@ export default function PatientChartPage() {
           />
         )}
         {tab === "notes" && (
-          <Paper sx={{ p: 2.5, borderRadius: "16px" }}>
+          <Box sx={{ py: 0.5 }}>
             {notes.loading ? (
               <LinearProgress aria-label="Loading notes" />
             ) : (
@@ -199,13 +181,12 @@ export default function PatientChartPage() {
                 emptyAction={noteAction}
               />
             )}
-          </Paper>
+          </Box>
         )}
         {tab === "medications" && <MedicationsTab patient={p} onChange={patient.setData} />}
         {tab === "labs" && <LabsTab patient={p} onChange={patient.setData} />}
         {tab === "appointments" && <SchedulingTab patient={p} section="appointments" />}
         {tab === "referrals" && <SchedulingTab patient={p} section="referrals" />}
-      </Box>
       </Box>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>

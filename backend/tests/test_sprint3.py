@@ -299,6 +299,7 @@ async def test_answer_key_replaces_and_stays_hidden(client, db_session):
     assert assigned.status_code == 200, assigned.text
     copy_id = assigned.json()["id"]
 
+    # Release alone is not enough — student still needs a cosigned note (CASE-05 / REV-07).
     stored = await db_session.get(Patient, uuid.UUID(copy_id))
     stored.answer_key_released_at = datetime.now(timezone.utc)
     await db_session.commit()
@@ -321,7 +322,8 @@ async def test_answer_key_replaces_and_stays_hidden(client, db_session):
     assert instructor_key.status_code == 200, instructor_key.text
     assert instructor_key.json()["diagnoses"][0]["code"] == "I10"
     assert instructor_key.json()["expectedCptCodes"] == body["expectedCptCodes"]
-    admin_key = await client.get(f"/api/v1/cases/{master_id}/answer-key", headers=instructor, params={"role": "admin"})
+    admin, _ = await login(client, "gerardo.sillas@utep.edu", role="admin")
+    admin_key = await client.get(f"/api/v1/cases/{master_id}/answer-key", headers=admin, params={"role": "admin"})
     assert admin_key.status_code == 200, admin_key.text
     assert [item["rank"] for item in admin_key.json()["diagnoses"]] == [1]
 

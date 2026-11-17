@@ -20,16 +20,24 @@ async def list_audit(
     course_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     rows = await memberships_for(db, user.id)
-    require(role, "audit:view", "Your role can't view the audit log.")
-    if course_id is None:
-        if role != "admin":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose a course to view its activity.")
-        require_held_role(user, role, rows)
-    else:
+    student_self = role == "student"
+    if student_self:
+        if course_id is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose a course to view your activity.")
         require_course(role, course_id, user, rows)
+    else:
+        require(role, "audit:view", "Your role can't view the audit log.")
+        if course_id is None:
+            if role != "admin":
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose a course to view its activity.")
+            require_held_role(user, role, rows)
+        else:
+            require_course(role, course_id, user, rows)
     statement = select(AuditEvent).order_by(AuditEvent.occurred_at.desc()).limit(300)
     if course_id is not None:
         statement = statement.where(AuditEvent.course_id == course_id)
+    if student_self:
+        statement = statement.where(AuditEvent.actor_user_id == user.id)
     events = (await db.scalars(statement)).all()
     payload = []
     for event in events:

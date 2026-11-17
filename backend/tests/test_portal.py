@@ -23,9 +23,9 @@ async def test_seeded_demo_patient_can_sign_in_and_view_portal(client):
 
 @pytest.mark.asyncio
 async def test_portal_returns_only_linked_chart_sorted_and_audits_success(client, db_session):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
-    course = await course_id(client, admin, "PHAR 5320")
-    rosa = await patient_by_mrn(client, admin, course, "instructor", "TR-20001")
+    instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    course = await course_id(client, instructor, "PHAR 5320")
+    rosa = await patient_by_mrn(client, instructor, course, "instructor", "TR-20001")
     headers, portal_user = await _portal_headers(client, db_session, rosa["id"], "linked")
 
     response = await client.get("/api/v1/portal", headers=headers)
@@ -60,10 +60,10 @@ async def test_portal_returns_only_linked_chart_sorted_and_audits_success(client
 
 @pytest.mark.asyncio
 async def test_portal_isolates_linked_charts_and_unlinked_login_is_not_found(client, db_session):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
-    course = await course_id(client, admin, "PHAR 5320")
-    rosa = await patient_by_mrn(client, admin, course, "instructor", "TR-20001")
-    elena = await patient_by_mrn(client, admin, course, "instructor", "TR-20003")
+    instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    course = await course_id(client, instructor, "PHAR 5320")
+    rosa = await patient_by_mrn(client, instructor, course, "instructor", "TR-20001")
+    elena = await patient_by_mrn(client, instructor, course, "instructor", "TR-20003")
     rosa_headers, _ = await _portal_headers(client, db_session, rosa["id"], "rosa")
     elena_headers, _ = await _portal_headers(client, db_session, elena["id"], "elena")
     unlinked_headers, unlinked_user = await _portal_headers(client, db_session, None, "unlinked")
@@ -98,9 +98,9 @@ async def test_student_and_instructor_are_denied_without_portal_view_audit(clien
 
 @pytest.mark.asyncio
 async def test_portal_rejects_write_methods(client, db_session):
-    admin, _ = await login(client, "gerardo.sillas@utep.edu")
-    course = await course_id(client, admin, "PHAR 5320")
-    rosa = await patient_by_mrn(client, admin, course, "instructor", "TR-20001")
+    instructor, _ = await login(client, "gerardo.sillas@utep.edu")
+    course = await course_id(client, instructor, "PHAR 5320")
+    rosa = await patient_by_mrn(client, instructor, course, "instructor", "TR-20001")
     headers, _ = await _portal_headers(client, db_session, rosa["id"], "readonly")
 
     for method in ("post", "put", "patch", "delete"):

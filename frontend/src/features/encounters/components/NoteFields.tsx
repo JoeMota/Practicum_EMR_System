@@ -66,14 +66,29 @@ export default function NoteFields({
   };
 
   return (
-    <Stack spacing={3.5}>
-      {template.sections.map((section) => {
+    <Stack spacing={0}>
+      {template.sections.map((section, index) => {
         const sectionComments = (comments ?? []).filter((item) => item.sectionId === section.id);
         return (
-        <Box component="section" key={section.id} aria-labelledby={`sec-${section.id}`}>
+        <Box
+          component="section"
+          key={section.id}
+          aria-labelledby={`sec-${section.id}`}
+          sx={{
+            py: 2.75,
+            borderTop: index === 0 ? "none" : `1px solid ${utep.lineSoft}`,
+            "@keyframes noteSectionIn": {
+              from: { opacity: 0, transform: "translateY(4px)" },
+              to: { opacity: 1, transform: "none" },
+            },
+            animation: "noteSectionIn 220ms ease both",
+            animationDelay: `${Math.min(index, 4) * 40}ms`,
+            "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+          }}
+        >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, flexWrap: "wrap" }}>
             {SOAP.has(section.id) && (
-              <Box aria-hidden sx={{ width: 30, height: 30, borderRadius: 1, bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>
+              <Box aria-hidden sx={{ width: 28, height: 28, borderRadius: 1, bgcolor: utep.navy, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13 }}>
                 {section.id}
               </Box>
             )}

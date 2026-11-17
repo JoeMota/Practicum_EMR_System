@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import {
-  Box, Button, Card, CardActionArea, CardContent, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography,
+  Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,8 @@ import { listCoursesForUser } from "../../api/courses";
 import { disciplineLabel, roleLabel } from "../../utils/labels";
 import { courseIdsForRole, homePathFor, uniqueRoles } from "../../utils/permissions";
 import { useAsync } from "../../utils/useAsync";
-import { trainingStripe, utep } from "../../theme/tokens";
+import BrandLogo from "../../components/BrandLogo";
+import { brandAtmosphere, fontDisplay, utep } from "../../theme/tokens";
 import { useSession } from "./useSession";
 
 export default function SelectCoursePage() {
@@ -35,17 +36,68 @@ export default function SelectCoursePage() {
   };
 
   return (
-    <Box sx={{ minHeight: "100dvh", bgcolor: "background.default" }}>
-      <Box sx={{ bgcolor: utep.orange, color: utep.navy, px: 3.5, height: 60, display: "flex", alignItems: "center" }}>
-        <Typography sx={{ fontWeight: 800, fontSize: 18 }}>UTEP EMR</Typography>
-        <Box sx={{ flex: 1 }} />
-        <Button color="inherit" onClick={signOut}>Sign out</Button>
+    <Box
+      sx={{
+        minHeight: "100dvh",
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "minmax(0, 0.9fr) minmax(340px, 520px)" },
+        bgcolor: utep.navyDark,
+      }}
+    >
+      <Box
+        sx={{
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          px: 7,
+          py: 7,
+          backgroundImage: brandAtmosphere,
+          color: "#fff",
+          position: "relative",
+          "&::after": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, transparent 40%, rgba(8,22,54,0.5) 100%)",
+            pointerEvents: "none",
+          },
+        }}
+      >
+        <Box sx={{ position: "relative", zIndex: 1 }}>
+          <BrandLogo variant="hero" titleSize={48} />
+          <Box sx={{ width: 64, height: 3, bgcolor: utep.orange, my: 2 }} />
+          <Typography sx={{ opacity: 0.85, maxWidth: "28ch" }}>
+            Pick the role and course for this session.
+          </Typography>
+          <Box sx={{ mt: 4, maxWidth: 240, opacity: 0.9 }}>
+            <BrandLogo variant="wordmark" />
+          </Box>
+        </Box>
       </Box>
-      <Box aria-hidden sx={{ height: 6, background: trainingStripe }} />
 
-      <Box component="main" sx={{ maxWidth: 640, mx: "auto", px: 2, py: 5 }}>
-        <Typography component="h1" variant="h5">Welcome, {user.fullName.split(" ")[0]}</Typography>
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
+      <Box
+        component="main"
+        sx={{
+          bgcolor: utep.paper,
+          px: { xs: 3, sm: 4 },
+          py: { xs: 4, md: 6 },
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100dvh",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 800, fontSize: 20, color: utep.navy, display: { md: "none" } }}>
+            UTEP EMR
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button onClick={signOut} size="small">Sign out</Button>
+        </Box>
+
+        <Typography component="h1" variant="h5" sx={{ mb: 0.75 }}>
+          Welcome, {user.fullName.split(" ")[0]}
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3, maxWidth: "42ch" }}>
           {activeRole === "admin"
             ? "Administration is separate from teaching."
             : "Choose the course you're working in today."}
@@ -61,7 +113,7 @@ export default function SelectCoursePage() {
               onChange={(_, r) => { if (r) { switchRole(r); setPickedId(undefined); } }}
             >
               {roles.map((role) => (
-                <ToggleButton key={role} value={role} sx={{ px: 2 }}>{roleLabel[role]}</ToggleButton>
+                <ToggleButton key={role} value={role} sx={{ px: 2, borderRadius: "4px !important" }}>{roleLabel[role]}</ToggleButton>
               ))}
             </ToggleButtonGroup>
           </Box>
@@ -75,48 +127,64 @@ export default function SelectCoursePage() {
             <Button variant="contained" size="large" onClick={() => navigate("/admin")}>Open administration</Button>
           </Box>
         ) : (
-        <>
-        <Stack spacing={1.5} role="radiogroup" aria-label="Courses">
-          {available.map((c) => {
-            const selected = picked === c.id;
-            return (
-              <Card
-                key={c.id}
-                sx={{
-                  borderColor: selected ? "primary.main" : "divider",
-                  borderWidth: selected ? 2 : 1,
-                  bgcolor: selected ? "rgba(14,34,80,0.04)" : "background.paper",
-                }}
-              >
-                <CardActionArea role="radio" aria-checked={selected} onClick={() => setPickedId(c.id)} onDoubleClick={go}>
-                  <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="subtitle1">{c.code}: {c.title}</Typography>
-                      <Typography variant="body2" color="text.secondary">{c.term}</Typography>
+          <>
+            <Stack spacing={1} role="radiogroup" aria-label="Courses">
+              {available.map((c) => {
+                const selected = picked === c.id;
+                return (
+                  <Box
+                    key={c.id}
+                    component="button"
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setPickedId(c.id)}
+                    onDoubleClick={go}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 2,
+                      width: "100%",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      px: 2,
+                      py: 1.75,
+                      borderRadius: 1,
+                      border: "none",
+                      bgcolor: selected ? "rgba(14,34,80,0.06)" : "transparent",
+                      boxShadow: selected ? `inset 3px 0 0 ${utep.orange}` : `inset 0 0 0 1px ${utep.lineSoft}`,
+                      fontFamily: "inherit",
+                      color: "inherit",
+                      transition: "background-color 160ms ease, box-shadow 160ms ease",
+                      "&:hover": { bgcolor: "rgba(14,34,80,0.04)" },
+                      "&:focus-visible": { outline: `3px solid ${utep.navy}`, outlineOffset: 2 },
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ lineHeight: 1.25 }}>{c.code}: {c.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {c.term}
+                        {assignment?.discipline ? ` · ${disciplineLabel[assignment.discipline]}` : ""}
+                        {` · ${c.status}`}
+                      </Typography>
                     </Box>
-                    {assignment?.discipline && <Chip size="small" label={disciplineLabel[assignment.discipline]} />}
-                    <Chip size="small" variant="outlined" label={c.status} />
                     {selected && <CheckCircleRounded color="primary" aria-hidden />}
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            );
-          })}
-          {error && (
-            <Typography color="error">{error.message}</Typography>
-          )}
-          {loading && <Typography color="text.secondary">Loading your courses…</Typography>}
-          {!loading && available.length === 0 && (
-            <Typography color="text.secondary">
-              You aren't on any course roster yet. Ask your instructor to add you.
-            </Typography>
-          )}
-        </Stack>
+                  </Box>
+                );
+              })}
+              {error && <Typography color="error">{error.message}</Typography>}
+              {loading && <Typography color="text.secondary">Loading your courses…</Typography>}
+              {!loading && available.length === 0 && (
+                <Typography color="text.secondary">
+                  You aren't on any course roster yet. Ask your instructor to add you.
+                </Typography>
+              )}
+            </Stack>
 
-        <Button variant="contained" size="large" sx={{ mt: 3 }} disabled={!picked} onClick={go}>
-          {picked ? "Open course" : "Select a course to continue"}
-        </Button>
-        </>
+            <Button variant="contained" size="large" sx={{ mt: 3, alignSelf: "flex-start" }} disabled={!picked} onClick={go}>
+              {picked ? "Open course" : "Select a course to continue"}
+            </Button>
+          </>
         )}
       </Box>
     </Box>

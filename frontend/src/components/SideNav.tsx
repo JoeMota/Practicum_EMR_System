@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Box, Button, Drawer, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Drawer, Menu, MenuItem, Switch, Tooltip } from "@mui/material";
 import DashboardOutlined from "@mui/icons-material/DashboardOutlined";
 import FactCheckOutlined from "@mui/icons-material/FactCheckOutlined";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
@@ -21,8 +21,9 @@ import { useDisplayPrefs } from "../theme/useDisplayPrefs";
 import { useAsync } from "../utils/useAsync";
 import { utep } from "../theme/tokens";
 import type { Role } from "../types";
+import BrandLogo from "./BrandLogo";
 
-export const SIDENAV_WIDTH = 248;
+export const SIDENAV_WIDTH = 232;
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: number; tabId?: string };
 
@@ -51,6 +52,7 @@ function useNav(): NavItem[] {
     student: [
       { to: "/dashboard", label: "Dashboard", icon: ICON.dashboard },
       { to: "/patients", label: "My Patients", icon: ICON.patients },
+      { to: "/my-activity", label: "My activity", icon: ICON.audit },
     ],
     instructor: [
       { to: "/dashboard", label: "Dashboard", icon: ICON.dashboard },
@@ -89,12 +91,17 @@ function useNav(): NavItem[] {
 }
 
 const itemSx = {
-  width: "100%", justifyContent: "flex-start", gap: 0.75, px: 1.75, py: 1.15, borderRadius: "10px",
-  color: "rgba(255,255,255,0.85)", fontSize: 15, fontWeight: 600,
+  width: "100%", justifyContent: "flex-start", gap: 0.75, px: 1.5, py: 1, borderRadius: 1,
+  color: "rgba(255,255,255,0.82)", fontSize: 14.5, fontWeight: 600,
   "&:hover": { bgcolor: "rgba(255,255,255,0.08)", color: "#fff" },
-  "&.active": { bgcolor: utep.orange, color: utep.navy, fontWeight: 700 },
-  "&.active:hover": { bgcolor: utep.orange },
-  "&.active .nav-badge": { bgcolor: utep.navy, color: "#fff" },
+  "&.active": {
+    bgcolor: "rgba(238,139,60,0.16)",
+    color: "#fff",
+    fontWeight: 700,
+    boxShadow: `inset 3px 0 0 ${utep.orange}`,
+  },
+  "&.active:hover": { bgcolor: "rgba(238,139,60,0.22)" },
+  "&.active .nav-badge": { bgcolor: utep.orange, color: utep.navy },
   "&:focus-visible": { outline: `3px solid ${utep.orange}`, outlineOffset: 2 },
 } as const;
 
@@ -134,23 +141,9 @@ function NavContent({ onNavigate, collapsed }: { onNavigate?: () => void; collap
   const portalTab = new URLSearchParams(location.search).get("tab") ?? "overview";
 
   return (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", px: 2, py: 3.5, bgcolor: utep.navy }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", gap: 1.25, px: collapsed ? 0 : 1.25, pb: 3.5 }}>
-        <Box
-          aria-hidden
-          sx={{
-            width: 38, height: 38, flexShrink: 0, borderRadius: "9px", bgcolor: utep.orange, color: utep.navy,
-            display: "grid", placeItems: "center", fontWeight: 800, fontSize: 15,
-          }}
-        >
-          UT
-        </Box>
-        {!collapsed && (
-          <Box>
-            <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>UTEP EMR</Typography>
-            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.75)" }}>Training system</Typography>
-          </Box>
-        )}
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", px: 1.5, py: 2.5, bgcolor: utep.navyDark }}>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", px: collapsed ? 0 : 1, pb: 2.5 }}>
+        <BrandLogo variant={collapsed ? "mark" : "lockup"} compact={collapsed} />
       </Box>
 
       <Box component="nav" aria-label="Main" sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -167,8 +160,8 @@ function NavContent({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   className="nav-badge"
                   aria-label={`${item.badge} awaiting review`}
                   sx={{
-                    minWidth: 22, height: 22, px: 0.5, borderRadius: "999px",
-                    bgcolor: utep.orange, color: utep.navy, fontSize: 12, fontWeight: 800,
+                    minWidth: 22, height: 22, px: 0.5, borderRadius: 1,
+                    bgcolor: "rgba(238,139,60,0.9)", color: utep.navy, fontSize: 12, fontWeight: 800,
                     display: "grid", placeItems: "center",
                   }}
                 >

@@ -78,6 +78,7 @@ export default function App() {
 
                   <Route element={<RequireAuth roles={["student"]} />}>
                     <Route path="/patients/:patientId/notes/:noteId" element={<NoteEditorPage />} />
+                    <Route path="/my-activity" element={<AuditLogPage />} />
                   </Route>
 
                   <Route element={<RequireAuth roles={["instructor", "course_coordinator"]} />}>

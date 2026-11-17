@@ -4,7 +4,7 @@ import { request } from "../../api/client";
 import { emptyIntake, getPortalIntake, type PortalIntake } from "../../api/intake";
 import { useAsync } from "../../utils/useAsync";
 import { formatDate } from "../../utils/format";
-import { trainingStripe, utep } from "../../theme/tokens";
+import { brandAccentBar, utep } from "../../theme/tokens";
 import PageError from "../../components/PageError";
 import { usePageHeading } from "../../components/usePageHeading";
 import PatientIntakeForm from "./PatientIntakeForm";
@@ -256,19 +256,19 @@ export default function PatientPortalPage({ previewMode = false }: { previewMode
   if (!previewMode) return portal;
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Paper
+      <Box
         component="header"
-        sx={{ mb: 2, overflow: "hidden", bgcolor: utep.orange, color: utep.navy, borderBottom: `4px solid ${utep.navy}` }}
+        sx={{ mb: 2, overflow: "hidden", bgcolor: utep.paper, color: utep.navy, boxShadow: `inset 0 0 0 1px ${utep.lineSoft}` }}
       >
-        <Box aria-hidden sx={{ height: 6, background: trainingStripe }} />
+        <Box aria-hidden sx={{ height: 3, background: brandAccentBar }} />
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ alignItems: { sm: "center" }, justifyContent: "space-between", p: { xs: 2, sm: 3 } }}>
           <Box>
-            <Typography variant="overline" sx={{ fontWeight: 800, letterSpacing: 1.1 }}>Patient portal</Typography>
-            <Typography component="h1" variant="h4" sx={{ fontWeight: 800, lineHeight: 1.15 }}>Your health, at a glance</Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>Visit details, medications, and recent lab results.</Typography>
+            <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.06em", color: utep.ink2 }}>Patient portal</Typography>
+            <Typography component="h1" variant="h4" sx={{ lineHeight: 1.15 }}>Your health, at a glance</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Visit details, medications, and recent lab results.</Typography>
           </Box>
         </Stack>
-      </Paper>
+      </Box>
       <Alert severity="info" sx={{ mb: 2 }}>Preview only. Nothing is saved.</Alert>
       {portal}
     </Container>

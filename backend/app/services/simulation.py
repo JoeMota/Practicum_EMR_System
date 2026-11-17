@@ -189,7 +189,10 @@ async def start_simulation(
         detail=f"Started {clone.last_name}, {clone.first_name} ({clone.mrn})",
     )
     await db.flush()
-    await db.refresh(clone, attribute_names=["allergies", "medications", "problems", "labs", "vitals", "encounter"])
+    await db.refresh(
+        clone,
+        attribute_names=["allergies", "medications", "problems", "labs", "vitals", "lung_sounds", "encounter"],
+    )
     return clone
 
 
