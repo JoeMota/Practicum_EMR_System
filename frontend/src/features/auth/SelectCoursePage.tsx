@@ -33,7 +33,6 @@ export default function SelectCoursePage() {
   // Navigate only after the session has the course — avoids empty queues/lists on first paint.
   useEffect(() => {
     if (!opening || !picked || courseId !== picked) return;
-    setOpening(false);
     navigate(homePathFor(activeRole), { replace: true });
   }, [opening, picked, courseId, activeRole, navigate]);
 
